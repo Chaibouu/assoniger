@@ -12,7 +12,7 @@ model Post {
     slug      String    @unique
     title     String
     body      String
-    // author    User      @relation(fields: [authorId], references: [id])
+    author    User      @relation(fields: [authorId], references: [id])
     authorId  String    @db.ObjectId
     comments  Comment[]
     createdAt DateTime  @default(now())
@@ -24,7 +24,7 @@ model User {
     email     String   @unique
     name      String?
     // address   Address?
-    // posts     Post[]
+    posts     Post[]
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 }

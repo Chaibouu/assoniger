@@ -4,19 +4,20 @@ const prisma = new PrismaClient()
 
 
 export const createUser = async (email: string,name: string,
-    // posts : Post[]
+    posts : Post[]
     ) => {
         
     const user = await prisma.user.create({
         data :{
             email,
             name,
-            // posts : {
-            //     create:{
-            //         title: 'My first post',
-            //         body: 'Lots of really interesting stuff',
-            //         slug: 'my-first-post',
-            // }}
+            posts : {
+                create:
+                    // title: 'My first post',
+                    // body: 'Lots of really interesting stuff',
+                    // slug: 'my-first-post',
+                    posts
+            }
         }
     })
     return user;

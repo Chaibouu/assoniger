@@ -3,9 +3,8 @@ import { NextRequest } from "next/server";
 
 // create user
 export async function POST(request: NextRequest) {
-    const {email,name} = await request.json()    
-    
-    const user = await createUser(email, name)
+    const {email,name,posts} = await request.json()  
+    const user = await createUser(email, name,posts)
     return Response.json(user)
 }
 
