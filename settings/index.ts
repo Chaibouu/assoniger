@@ -1,7 +1,7 @@
 const appConfig = {
-    appName :"Website starter",
-    websiteTitle : "first starter",
-    websiteDescription : "hello this is the starter",
+    appName :"Sahel Coders Starter",
+    websiteTitle : "Website Starter",
+    websiteDescription : "Sahel Coders simple authentication service and admin panel",
     logoUrl : "/logo.jpg",
     adminSidebarColor : "#1C2434",
     mailOptions : {
@@ -15,8 +15,7 @@ const appConfig = {
     },
     publicRoutes:[
         "/",
-        "/admins"
     ],
-    defaultLoginRedirect:"/settings"
+    defaultLoginRedirect:"/dashboard/settings"
 }
 export default appConfig

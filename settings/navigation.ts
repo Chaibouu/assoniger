@@ -18,17 +18,22 @@ export  const adminNavigation  : NavigationItem[]  = [
       path: '/admin',
     },
     {
-      title: 'Test',
-      icon: 'devicon:vitest',
+      title: 'Paramètres',
+      icon: 'material-symbols:settings',
+      path: '/dashboard/settings',
+    },
+    {
+      title: 'Pages',
+      icon: 'eos-icons:admin',
       path: '#',
       children: [
         {
-          title: 'Test1',
-          path: '/test/test1',
+          title: 'Client',
+          path: '/dashboard/client',
         },
         {
-          title: 'Test2',
-          path: '/test/test2',
+          title: 'Server',
+          path: '/dashboard/server',
         },
       ],
     },

@@ -1,5 +1,5 @@
 "use client";
-import { useState,useEffect } from "react";
+import { useState } from "react";
 import { usePathname,useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
@@ -19,7 +19,6 @@ export default function RootLayout({
   const router = useRouter();
     
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState<boolean>(true);
 
   const pathname = usePathname();
 
