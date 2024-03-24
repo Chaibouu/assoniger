@@ -2,7 +2,7 @@ import Link from "next/link";
 import DarkModeSwitcher from "./DarkModeSwitcher";
 import DropdownUser from "./DropdownUser";
 import Image from "next/image";
-import themeConfig from "@/configs/themeConfis";
+import appConfig from "@/settings";
 
 const Header = (props: {
   sidebarOpen: string | boolean | undefined;
@@ -59,8 +59,8 @@ const Header = (props: {
             <Image
               width={100}
               height={32}
-              src={`${themeConfig.logoUrl}`}
-              alt={`${themeConfig.appName}`}
+              src={`${appConfig.logoUrl}`}
+              alt={`${appConfig.appName}`}
             />
           </Link>
         </div>

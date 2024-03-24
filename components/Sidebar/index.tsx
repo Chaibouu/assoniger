@@ -5,7 +5,7 @@ import { Icon } from '@iconify/react';
 import SidebarLinkGroup from "./SidebarLinkGroup";
 import Image from "next/image";
 import { NavigationItem } from "@/settings/navigation";
-import themeConfig from "@/configs/themeConfis";
+import appConfig from "@/settings";
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -72,7 +72,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen,navigation }: SidebarProps) => {
           <Image
             width={176}
             height={32}
-            src={`${themeConfig.logoUrl}`}
+            src={`${appConfig.logoUrl}`}
             alt="Logo"
           />
         </Link>

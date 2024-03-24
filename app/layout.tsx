@@ -1,23 +1,30 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { SessionProvider } from 'next-auth/react'
 import "./globals.css";
-import themeConfig from "@/configs/themeConfis";
-
+import appConfig from "@/settings";
+import { auth } from '@/auth'
+import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: `${themeConfig.websiteTitle}`,
-  description: `${themeConfig.websiteDescription}`,
+  title: `${appConfig.websiteTitle}`,
+  description: `${appConfig.websiteDescription}`,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
-    </html>
+    <SessionProvider session={session}>
+      <html lang="en">
+        <Toaster />
+        <body className={inter.className}>{children}</body>
+      </html>
+    </SessionProvider>
   );
 }
