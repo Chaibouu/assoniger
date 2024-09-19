@@ -16,5 +16,9 @@ const appConfig = {
   },
   publicRoutes: ["/", "/test"],
   defaultLoginRedirect: "/dashboard/settings",
+
+  // Ajout d'une option pour autoriser ou non les connexions multiples
+  allowMultipleSessions: false, // ou false pour invalider les anciennes sessions
 };
+
 export default appConfig;

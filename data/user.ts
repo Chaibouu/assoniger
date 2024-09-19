@@ -10,12 +10,37 @@ export const getUserByEmail = async (email: string) => {
   }
 };
 
-export const getUserById = async (id: string) => {
+// export const getUserById = async (id: string) => {
+//   try {
+//     const user = await db.user.findUnique({ where: { id } });
+
+//     return user;
+//   } catch {
+//     return null;
+//   }
+// };
+
+export async function getUserById(userId: string) {
   try {
-    const user = await db.user.findUnique({ where: { id } });
+    // Récupérer les informations de l'utilisateur depuis la base de données
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true, // Ajoute les champs que tu veux récupérer
+      },
+    });
+
+    if (!user) {
+      throw new Error("Utilisateur non trouvé");
+    }
 
     return user;
-  } catch {
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'utilisateur:", error);
     return null;
   }
-};
+}

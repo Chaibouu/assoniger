@@ -7,7 +7,7 @@ import appConfig from "./settings";
  */
 export const publicRoutes = [
   "/auth/new-verification",
-  ...appConfig.publicRoutes.map(route => route)
+  ...appConfig.publicRoutes.map((route) => route),
 ];
 
 /**
@@ -20,10 +20,14 @@ export const authRoutes = [
   "/auth/register",
   "/auth/error",
   "/auth/reset",
-  "/auth/new-password"
+  "/auth/new-password",
+  "/auth/logout",
+  "/auth/refresh",
+  "/auth/signup",
+  "/auth/verify",
 ];
 
-/** 
+/**
  * The prefix for API authentication routes
  * Routes that start with this prefix are used for API authentication purposes
  * @type {string}
@@ -34,4 +38,4 @@ export const apiAuthPrefix = "/api/auth";
  * The default redirect path after logging in
  * @type {string}
  */
-export const DEFAULT_LOGIN_REDIRECT = appConfig.defaultLoginRedirect ;
+export const DEFAULT_LOGIN_REDIRECT = appConfig.defaultLoginRedirect;

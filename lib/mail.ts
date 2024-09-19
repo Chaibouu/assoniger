@@ -34,8 +34,9 @@ export const sendVerificationEmail = async (email: string, token: string) => {
   const mailOptions = {
     from: "contact@sahelcoders.com",
     to: email,
-    subject: "Confirm your email",
-    html: `<p>Click <a href="${confirmLink}">here</a> to confirm email.</p>`,
+    subject: "Vérification de votre compte",
+    html: `<p>Merci de vous être inscrit. Cliquez sur le lien suivant pour      vérifier votre compte :</p>
+  <a href="${confirmLink}">Vérifiez votre compte</a>`,
   };
 
   await transporter.sendMail(mailOptions);
