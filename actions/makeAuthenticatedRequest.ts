@@ -43,7 +43,7 @@ export async function makeAuthenticatedRequest(
       // Mettre à jour les cookies avec le nouveau token d'accès
       cookies().set("accessToken", refreshData.accessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: true,
         maxAge: 60 * 60, // 1 heure
       });
 

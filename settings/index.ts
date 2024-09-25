@@ -14,11 +14,16 @@ const appConfig = {
       pass: process.env.MAIL_AUTH_PASSWORD,
     },
   },
-  publicRoutes: ["/", "/test"],
+  publicRoutes: ["/"],
   defaultLoginRedirect: "/dashboard/settings",
 
   // Ajout d'une option pour autoriser ou non les connexions multiples
   allowMultipleSessions: false, // ou false pour invalider les anciennes sessions
+  // Ajout de la configuration pour le rate limiting
+  rateLimit: {
+    windowMs: 60 * 1000, // Durée de la fenêtre en ms (1 minute)
+    max: 5, // Nombre maximum de requêtes par IP dans la fenêtre
+  },
 };
 
 export default appConfig;
