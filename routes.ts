@@ -27,6 +27,13 @@ export const authRoutes = [
   "/auth/verify",
 ];
 
+export const protectedRoutes = [
+  "/api/profile",
+  "/test",
+
+  // Ajoutez ici toutes les routes protégées
+];
+
 /**
  * The prefix for API authentication routes
  * Routes that start with this prefix are used for API authentication purposes

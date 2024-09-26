@@ -27,24 +27,24 @@ export async function POST(req: Request) {
 
     // Générer un nouveau token d'accès chiffré avec JWE
     const payload = { userId: session.userId }; // Charger les informations utilisateur
-    const newAccessToken = createEncryptedJWT(payload, "1h"); // Expiration 1h
+    const newAccessToken = createEncryptedJWT(payload, "8h"); // Expiration 1h
 
     // Calculer l'heure d'expiration du token d'accès
-    const accessTokenExpiresAt = Math.floor(Date.now() / 1000) + 60 * 60; // Expire dans 1 heure (en secondes)
+    const accessTokenExpiresAt = 60 * 60 * 8; // Expire dans 8 heure
 
     // Mettre à jour la session avec le nouveau token d'accès et l'heure d'expiration
     await db.session.update({
       where: { id: session.id },
       data: {
         sessionToken: newAccessToken, // Stocker le nouveau token d'accès chiffré
-        expires: new Date(accessTokenExpiresAt * 1000), // Expiration en format `Date`
+        expires: new Date(Date.now() + accessTokenExpiresAt * 1000),
       },
     });
 
-    // Renvoie du nouveau token d'accès au client, avec l'heure d'expiration au format UNIX (en secondes)
+    // Renvoie du nouveau token d'accès au client
     return NextResponse.json({
       accessToken: newAccessToken,
-      accessTokenExpiresAt, // Expiration en secondes UNIX pour faciliter la manipulation côté client
+      accessTokenExpiresAt,
     });
   } catch (error) {
     console.error("Erreur lors du rafraîchissement des tokens :", error);

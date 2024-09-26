@@ -1,15 +1,33 @@
 import { db } from "@/lib/db";
 
-export const getVerificationTokenByToken = async (tokenId: string) => {
+// Récupérer le token en fonction du tokenId
+export const getVerificationTokenByTokenId = async (tokenId: string) => {
   try {
     const verificationToken = await db.verificationToken.findUnique({
-      where: { tokenId }, // Cherche par tokenId et non par le token complet
+      where: { tokenId }, // Cherche par tokenId
     });
 
     return verificationToken;
   } catch (error) {
     console.error(
-      "Erreur lors de la récupération du token de vérification :",
+      "Erreur lors de la récupération du token de vérification par tokenId :",
+      error
+    );
+    return null;
+  }
+};
+
+// Récupérer le token en fonction du token complet
+export const getVerificationTokenByToken = async (token: string) => {
+  try {
+    const verificationToken = await db.verificationToken.findUnique({
+      where: { token }, // Cherche par le token complet
+    });
+
+    return verificationToken;
+  } catch (error) {
+    console.error(
+      "Erreur lors de la récupération du token de vérification par token complet :",
       error
     );
     return null;

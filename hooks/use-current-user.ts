@@ -1,5 +1,7 @@
-// export const useCurrentUser = () => {
-//   const session = useSession();
+import { getUser } from "@/actions/getUser";
 
-//   return session.data?.user;
-// };
+export const useCurrentUser = async () => {
+  const result = await getUser();
+
+  return await result.user;
+};

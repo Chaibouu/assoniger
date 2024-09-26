@@ -4,12 +4,14 @@ import {
   verifyVerificationToken,
   generateVerificationToken,
 } from "@/lib/tokens";
-import { getVerificationTokenByToken } from "@/data/verification-token";
-import { sendVerificationEmail } from "@/lib/mail"; // Pour envoyer un nouveau token si nécessaire
+import {
+  getVerificationTokenByTokenId,
+  getVerificationTokenByToken,
+} from "@/data/verification-token";
+import { sendVerificationEmail } from "@/lib/mail";
 
 export async function POST(req: Request) {
   try {
-    // Récupérer le token à partir du corps de la requête
     const { token } = await req.json();
 
     if (!token) {
@@ -17,40 +19,44 @@ export async function POST(req: Request) {
     }
 
     // Vérifier le token avec la clé publique RSA
-    const tokenPayload = await verifyVerificationToken(token);
+    const { tokenPayload, error } = await verifyVerificationToken(token);
 
-    if (!tokenPayload) {
-      // Cas du token invalide
+    // Cas du token expiré ou invalide
+    if (error === "Token expiré") {
+      const storedToken = await getVerificationTokenByToken(token);
+      if (!storedToken) {
+        return NextResponse.json(
+          { error: "Token introuvable" },
+          { status: 400 }
+        );
+      }
+
+      const newToken = await generateVerificationToken(storedToken.email);
+      await sendVerificationEmail(storedToken.email, newToken);
+
+      return NextResponse.json(
+        {
+          error: "Token expiré. Un nouvel email de vérification a été envoyé.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error === "Token invalide") {
       return NextResponse.json({ error: "Token invalide" }, { status: 400 });
     }
-    // Récupérer l'email et le tokenId à partir du payload
+
+    // Récupérer l'email et le tokenId à partir du tokenPayload
     const { email, tokenId } = tokenPayload as {
       email: string;
       tokenId: string;
     };
 
     // Vérifier si le token est toujours valide dans la base de données
-    const storedToken = await getVerificationTokenByToken(tokenId);
+    const storedToken = await getVerificationTokenByTokenId(tokenId);
     if (!storedToken) {
       return NextResponse.json(
         { error: "Token introuvable ou déjà utilisé" },
-        { status: 400 }
-      );
-    }
-
-    // Vérifier l'expiration du token
-    if (new Date() > storedToken.expires) {
-      // Cas du token expiré
-      // Générer un nouveau token
-      const newToken = await generateVerificationToken(email);
-
-      // Envoyer un nouvel email de vérification
-      await sendVerificationEmail(email, newToken);
-
-      return NextResponse.json(
-        {
-          error: "Token expiré. Un nouvel email de vérification a été envoyé.",
-        },
         { status: 400 }
       );
     }
@@ -66,7 +72,6 @@ export async function POST(req: Request) {
       where: { id: storedToken.id },
     });
 
-    // Réponse de succès
     return NextResponse.json(
       { message: "Compte vérifié avec succès" },
       { status: 200 }

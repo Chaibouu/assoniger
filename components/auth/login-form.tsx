@@ -3,9 +3,10 @@
 import * as z from "zod";
 import { useForm } from "react-hook-form";
 import { useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { Icon } from "@iconify/react";
 
 import { LoginSchema } from "@/schemas";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import {
   FormLabel,
   FormMessage,  
 } from "@/components/ui/form";
-import { CardWrapper } from "@/components/auth/card-wrapper"
+import { CardWrapper } from "@/components/auth/card-wrapper";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
@@ -25,12 +26,15 @@ import { login } from "@/actions/login";
 
 export const LoginForm = () => {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl");
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
   const urlError = searchParams.get("error") === "OAuthAccountNotLinked"
     ? "Email already in use with different provider!"
     : "";
+  
+  const router = useRouter(); // Pour rediriger l'utilisateur
 
   const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Pour basculer le mot de passe
   const [error, setError] = useState<string | undefined>("");
   const [success, setSuccess] = useState<string | undefined>("");
   const [isPending, startTransition] = useTransition();
@@ -46,9 +50,9 @@ export const LoginForm = () => {
   const onSubmit = (values: z.infer<typeof LoginSchema>) => {
     setError("");
     setSuccess("");
-    
+
     startTransition(() => {
-      login(values, callbackUrl)
+      login({ ...values })
         .then((data) => {
           if (data?.error) {
             form.reset();
@@ -58,11 +62,12 @@ export const LoginForm = () => {
           if (data?.success) {
             form.reset();
             setSuccess(data.success);
+            router.push(callbackUrl); // Redirection après succès
           }
 
-          if (data?.twoFactor) {
-            setShowTwoFactor(true);
-          }
+          // if (data?.twoFactor) {
+          //   setShowTwoFactor(true);
+          // }
         })
         .catch(() => setError("Something went wrong"));
     });
@@ -126,14 +131,26 @@ export const LoginForm = () => {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          disabled={isPending}
-                          placeholder="******"
-                          type="password"
-                        />
-                      </FormControl>
+                      <div className="relative">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            disabled={isPending}
+                            placeholder="******"
+                            type={showPassword ? "text" : "password"}
+                          />
+                        </FormControl>
+                        <div
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                        >
+                          {showPassword ? (
+                            <Icon icon="mdi:eye-off" width={24} height={24} />
+                          ) : (
+                            <Icon icon="mdi:eye" width={24} height={24} />
+                          )}
+                        </div>
+                      </div>
                       <Button
                         size="sm"
                         variant="link"
@@ -148,8 +165,8 @@ export const LoginForm = () => {
                     </FormItem>
                   )}
                 />
-            </>
-          )}
+              </>
+            )}
           </div>
           <FormError message={error || urlError} />
           <FormSuccess message={success} />

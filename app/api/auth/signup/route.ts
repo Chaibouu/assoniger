@@ -40,7 +40,7 @@ export async function POST(req: Request) {
 
     // Générer un token de vérification signé avec RSA
     const verificationToken = await generateVerificationToken(email);
-    console.log(verificationToken);
+    // console.log(verificationToken);
     // Créer l'utilisateur dans la base de données
     await db.user.create({
       data: {

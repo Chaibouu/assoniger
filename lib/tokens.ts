@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getVerificationTokenByEmail } from "@/data/verification-token";
 import { getPasswordResetTokenByEmail } from "@/data/password-reset-token";
 import { getTwoFactorTokenByEmail } from "@/data/two-factor-token";
-import { JwtPayload } from "jsonwebtoken"; // Type du payload JWT
+import { JwtPayload, TokenExpiredError } from "jsonwebtoken"; // Type du payload JWT
 import { verify, sign } from "jsonwebtoken";
 const privateKey = process.env.RSA_PRIVATE_KEY as string;
 const publicKey = process.env.RSA_PUBLIC_KEY as string;
@@ -114,7 +114,6 @@ export const verifyVerificationToken = async (encryptedToken: string) => {
     // Séparer les différentes parties du token chiffré
     const [ivBase64, authTagBase64, encryptedBase64] =
       encryptedToken.split(".");
-
     // Convertir en Buffer
     const iv = Buffer.from(ivBase64, "base64");
     const authTag = Buffer.from(authTagBase64, "base64");
@@ -139,13 +138,14 @@ export const verifyVerificationToken = async (encryptedToken: string) => {
     });
 
     // Retourner le contenu du token si la vérification a réussi
-    return decodedToken;
-  } catch (error) {
-    console.error(
-      "Erreur lors de la vérification du token de vérification :",
-      error
-    );
-    return null; // Retourner null si le token est invalide ou expiré
+    return { tokenPayload: decodedToken };
+  } catch (error: any) {
+    if (error instanceof TokenExpiredError) {
+      return { error: "Token expiré" };
+    } else {
+      console.error("Erreur lors de la vérification du token :", error);
+      return { error: "Token invalide" };
+    }
   }
 };
 

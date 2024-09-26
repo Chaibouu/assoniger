@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { LoginSchema } from "@/schemas";
+import { setMultipleCookies } from "./setMultipleCookies";
 
 export const login = async (data: {
   email: string;
@@ -45,22 +46,28 @@ export const login = async (data: {
     const cookieStore = cookies();
 
     // Cookie pour le token d'accès
-    cookieStore.set("accessToken", accessToken, {
-      httpOnly: true,
-      secure: true,
-      maxAge: rememberMe ? 30 * 24 * 60 * 60 : 60 * 60,
-      path: "/",
-      sameSite: "strict",
-    });
-
-    // Cookie pour le token de rafraîchissement
-    cookieStore.set("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      maxAge: rememberMe ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60,
-      path: "/",
-      sameSite: "strict",
-    });
+    await setMultipleCookies([
+      {
+        name: "accessToken",
+        value: accessToken,
+        options: {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 60 * 60, // 1 heure
+          sameSite: "lax", // Cross-site permis
+        },
+      },
+      {
+        name: "refreshToken",
+        value: refreshToken,
+        options: {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: rememberMe ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60,
+          sameSite: "lax", // Cross-site permis
+        },
+      },
+    ]);
 
     return { success: "Connexion réussie" };
   } catch (error) {

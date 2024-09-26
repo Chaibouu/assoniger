@@ -1,15 +1,36 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { refreshUserToken } from "@/lib/user";
 
 export const logout = async () => {
   try {
-    // Appeler l'API logout
+    const cookieStore = cookies();
+
+    // Récupérer les tokens d'accès et de rafraîchissement
+    let accessToken = cookieStore.get("accessToken")?.value;
+    const refreshToken = cookieStore.get("refreshToken")?.value;
+
+    if (!accessToken && refreshToken) {
+      // Tenter de rafraîchir l'accessToken si le refreshToken est disponible
+      const refreshResponse = await refreshUserToken(refreshToken);
+      if (refreshResponse.accessToken) {
+        accessToken = refreshResponse.accessToken; // Utiliser le nouveau token
+      }
+    }
+
+    // Si aucun accessToken n'est présent même après la tentative de rafraîchissement
+    if (!accessToken) {
+      return { error: "Impossible de se déconnecter, token d'accès manquant." };
+    }
+
+    // Appeler l'API logout et envoyer le token d'accès
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/logout`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: accessToken }),
       }
     );
 
@@ -21,7 +42,6 @@ export const logout = async () => {
     }
 
     // Supprimer les cookies d'accès et de rafraîchissement
-    const cookieStore = cookies();
     cookieStore.set("accessToken", "", { maxAge: -1, path: "/" });
     cookieStore.set("refreshToken", "", { maxAge: -1, path: "/" });
 
