@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BeatLoader } from "react-spinners";
 import { useSearchParams } from "next/navigation";
 
-import { newVerification } from "@/actions/new-verification";
+import { verifyUserToken } from "@/actions/verifyUserToken"; // Import de l'action actualisée
 import { CardWrapper } from "@/components/auth/card-wrapper";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
@@ -12,31 +12,36 @@ import { FormSuccess } from "@/components/form-success";
 export const NewVerificationForm = () => {
   const [error, setError] = useState<string | undefined>();
   const [success, setSuccess] = useState<string | undefined>();
+  const [isLoading, setIsLoading] = useState<boolean>(true); // État pour éviter les requêtes répétées
 
   const searchParams = useSearchParams();
-
   const token = searchParams.get("token");
 
-  const onSubmit = useCallback(() => {
-    if (success || error) return;
+  const onSubmit = useCallback(async () => {
+    if (success || error || !token) return; // Empêcher une nouvelle soumission si la requête a déjà réussi ou échoué
+    const decodedToken = decodeURIComponent(token);
+    console.log('Le championnnnn==========================');
+    console.log(decodedToken);
+    console.log('====================================');
+    setIsLoading(true);
+    const result = await verifyUserToken(decodedToken);
 
-    if (!token) {
-      setError("Missing token!");
-      return;
+    if (result.error) {
+      setError(result.error);
+    } else if (result.success) {
+      setSuccess(result.success);
     }
 
-    newVerification(token)
-      .then((data) => {
-        setSuccess(data.success);
-        setError(data.error);
-      })
-      .catch(() => {
-        setError("Something went wrong!");
-      })
+    setIsLoading(false); // Fin du chargement après la requête
   }, [token, success, error]);
 
   useEffect(() => {
-    onSubmit();
+    if (!token) {
+      setError("Token manquant dans l'URL. Veuillez vérifier le lien.");
+      setIsLoading(false); 
+      return;
+    }
+    onSubmit(); // Soumettre la requête lors du montage du composant
   }, [onSubmit]);
 
   return (
@@ -46,7 +51,7 @@ export const NewVerificationForm = () => {
       backButtonHref="/auth/login"
     >
       <div className="flex items-center w-full justify-center">
-        {!success && !error && (
+        {isLoading && !success && !error && (
           <BeatLoader />
         )}
         <FormSuccess message={success} />
@@ -55,5 +60,5 @@ export const NewVerificationForm = () => {
         )}
       </div>
     </CardWrapper>
-  )
-}
+  );
+};
