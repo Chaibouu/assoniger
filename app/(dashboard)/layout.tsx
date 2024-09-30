@@ -9,6 +9,10 @@ import { adminNavigation, collaboratorsNavigation, managerNavigation } from "@/s
 import "./globals.css";
 import "./data-tables-css.css";
 import "./satoshi.css";
+import { SidebarBody } from "@/components/ui/sidebar";
+import { SidebarDemo } from "@/components/Sidebarr/Sidebarr";
+import { NavigationItem } from "@/settings/navigation";
+import appConfig from "@/settings";
 
 export default function RootLayout({
   children,
@@ -26,7 +30,9 @@ export default function RootLayout({
     <div className="dark:bg-boxdark-2 dark:text-bodydark">
       <div className="flex h-screen overflow-hidden">
         {/* <!-- ===== Sidebar Start ===== --> */}
-        <Sidebar navigation={adminNavigation} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        {/* <Sidebar navigation={adminNavigation} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} /> */}
+        <SidebarDemo />
+
         {/* <!-- ===== Sidebar End ===== --> */}
 
         {/* <!-- ===== Content Area Start ===== --> */}

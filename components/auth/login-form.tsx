@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
 import { login } from "@/actions/login";
+import { Checkbox } from "../ui/checkbox";
 
 export const LoginForm = () => {
   const searchParams = useSearchParams();
@@ -125,7 +127,7 @@ export const LoginForm = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
+                {/* <FormField
                   control={form.control}
                   name="password"
                   render={({ field }) => (
@@ -164,7 +166,70 @@ export const LoginForm = () => {
                       <FormMessage />
                     </FormItem>
                   )}
+                /> */}
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <div className="relative">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            disabled={isPending}
+                            placeholder="******"
+                            type={showPassword ? "text" : "password"}
+                          />
+                        </FormControl>
+                        <div
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                        >
+                          {showPassword ? (
+                            <Icon icon="mdi:eye-off" width={24} height={24} />
+                          ) : (
+                            <Icon icon="mdi:eye" width={24} height={24} />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-around my-2">
+                        <Button
+                              size="sm"
+                              variant="link"
+                              asChild
+                              className="px-0 font-normal"
+                            >
+                          <Link href="/auth/reset">Forgot password?</Link>
+                        </Button>
+                        {/* Checkbox Remember Me */}
+                        <div className="flex items-center space-x-2 cursor-pointer">
+                          <FormField
+                            control={form.control}
+                            name="rememberMe"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel>
+                                      Remember me
+                                  </FormLabel>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+                      </div>
+                    </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
+
               </>
             )}
           </div>

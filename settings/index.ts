@@ -4,6 +4,7 @@ const appConfig = {
   websiteDescription:
     "Sahel Coders simple authentication service and admin panel",
   logoUrl: "/logo.jpg",
+  sidebarlogoUrl: "/sahel_coders_logo.png",
   adminSidebarColor: "#1C2434",
   mailOptions: {
     host: process.env.MAIL_HOST,
