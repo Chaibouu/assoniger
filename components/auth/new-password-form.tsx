@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { NewPasswordSchema } from "@/schemas";
+import { resetPasswordSchema } from "@/schemas";
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -20,7 +20,7 @@ import { CardWrapper } from "@/components/auth/card-wrapper"
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
-import { newPassword } from "@/actions/new-password";
+import { resetPassword } from "@/actions/reset-password";
 
 export const NewPasswordForm = () => {
   const searchParams = useSearchParams();
@@ -30,24 +30,32 @@ export const NewPasswordForm = () => {
   const [success, setSuccess] = useState<string | undefined>("");
   const [isPending, startTransition] = useTransition();
 
-  const form = useForm<z.infer<typeof NewPasswordSchema>>({
-    resolver: zodResolver(NewPasswordSchema),
+  const form = useForm<z.infer<typeof resetPasswordSchema>>({
+    resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
-      password: "",
+      newPassword: "",
     },
   });
 
-  const onSubmit = (values: z.infer<typeof NewPasswordSchema>) => {
+  const onSubmit = (values: z.infer<typeof resetPasswordSchema>) => {
     setError("");
     setSuccess("");
+    if (token) {
+    const decodedToken = decodeURIComponent(token);
 
-    startTransition(() => {
-      newPassword(values, token)
-        .then((data) => {
-          setError(data?.error);
-          setSuccess(data?.success);
-        });
-    });
+      const submitValues = {
+        newPassword:values.newPassword,
+        token:decodedToken
+      }
+      startTransition(() => {
+        resetPassword(submitValues)
+          .then((data) => {
+            setError(data?.error);
+            setSuccess(data?.success);
+          });
+      });
+    }
+
   };
 
   return (
@@ -64,7 +72,7 @@ export const NewPasswordForm = () => {
           <div className="space-y-4">
             <FormField
               control={form.control}
-              name="password"
+              name="newPassword"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Password</FormLabel>

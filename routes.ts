@@ -5,10 +5,7 @@ import appConfig from "./settings";
  * These routes do not require authentication
  * @type {string[]}
  */
-export const publicRoutes = [
-  "/auth/new-verification",
-  ...appConfig.publicRoutes.map((route) => route),
-];
+export const publicRoutes = [...appConfig.publicRoutes.map((route) => route)];
 
 /**
  * An array of routes that are used for authentication
@@ -17,21 +14,13 @@ export const publicRoutes = [
  */
 export const authRoutes = [
   "/auth/login",
-  "/auth/register",
-  "/auth/error",
-  "/auth/reset",
-  "/auth/new-password",
   "/auth/logout",
   "/auth/refresh",
   "/auth/signup",
   "/auth/verify",
-];
-
-export const protectedRoutes = [
-  "/api/profile",
-  "/test",
-
-  // Ajoutez ici toutes les routes protégées
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/resend-verification",
 ];
 
 /**

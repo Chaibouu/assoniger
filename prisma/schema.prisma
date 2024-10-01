@@ -76,6 +76,7 @@ model PasswordResetToken {
     email   String
     token   String   @unique
     expires DateTime
+    tokenId String   @unique
 
     @@unique([email, token])
 }

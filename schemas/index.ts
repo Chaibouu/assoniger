@@ -37,37 +37,73 @@ export const SettingsSchema = z
     }
   );
 
-export const NewPasswordSchema = z.object({
-  password: z.string().min(6, {
-    message: "Minimum of 6 characters required",
-  }),
+// Schéma pour l'action forgot-password
+export const PasswordResetSchema = z.object({
+  email: z.string().email({ message: "L'adresse email n'est pas valide" }),
 });
 
-export const ResetSchema = z.object({
-  email: z.string().email({
-    message: "Email is required",
-  }),
+// Schéma pour l'action reset-password
+export const resetPasswordSchema = z.object({
+  token: z.string().optional(),
+  newPassword: z
+    .string({
+      message: "Le mot de passe est requis",
+    })
+    .min(8, {
+      message: "Le mot de passe doit contenir au moins 8 caractères",
+    }),
 });
 
 export const LoginSchema = z.object({
   email: z.string().email({
-    message: "Email is required",
+    message: "L'adresse email n'est pas valide",
   }),
-  password: z.string().min(1, {
-    message: "Password is required",
-  }),
+  password: z
+    .string({
+      message: "Le mot de passe est requis",
+    })
+    .min(8, {
+      message: "Le mot de passe doit contenir au moins 8 caractères",
+    }),
   code: z.optional(z.string()),
   rememberMe: z.boolean().optional(),
 });
 
 export const SignupSchema = z.object({
   email: z.string().email({
-    message: "Email is required",
+    message: "L'adresse email n'est pas valide",
   }),
-  password: z.string().min(6, {
-    message: "Minimum 6 characters required",
+  password: z
+    .string({
+      message: "Le mot de passe est requis",
+    })
+    .min(8, {
+      message: "Le mot de passe doit comporter au moins 8 caractères",
+    }),
+  name: z
+    .string({
+      message: "Le nom est requis",
+    })
+    .min(3, {
+      message: "Le nom doit comporter au moins 3 caractères",
+    }),
+});
+
+export const ResendVerificationSchema = z.object({
+  email: z.string().email({
+    message: "L'adresse email n'est pas valide",
   }),
-  name: z.string().min(1, {
-    message: "Name is required",
+});
+
+export const ResetPasswordSchema = z.object({
+  token: z.string({
+    message: "Le token est requis",
   }),
+  newPassword: z
+    .string({
+      message: "Le mot de passe est requis",
+    })
+    .min(8, {
+      message: "Le mot de passe doit comporter au moins 8 caractères",
+    }),
 });

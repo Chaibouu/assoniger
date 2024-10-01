@@ -37,26 +37,94 @@ export const generateTwoFactorToken = async (email: string) => {
 };
 
 export const generatePasswordResetToken = async (email: string) => {
-  const token = uuidv4();
-  const expires = new Date(new Date().getTime() + 3600 * 1000);
+  const tokenId = uuidv4();
+  const expires = new Date(new Date().getTime() + 3600 * 1000); // Expiration dans 1 heure
 
+  // Créer le payload pour le JWT
+  const payload = {
+    email,
+    tokenId,
+    expires: expires.toISOString(),
+  };
+
+  // Signer le JWT avec la clé privée RSA (RS256)
+  const signedToken = sign(payload, privateKey, {
+    algorithm: ALGORITHM,
+    expiresIn: "1h", // Expire dans 1 heure
+  });
+
+  // Chiffrer le JWT signé avec AES-256-GCM
+  const iv = crypto.randomBytes(12); // Générer un vecteur d'initialisation (IV) de 12 octets pour GCM
+  const cipher = crypto.createCipheriv("aes-256-gcm", aesSecretKey, iv);
+
+  let encrypted = cipher.update(signedToken, "utf8", "base64");
+  encrypted += cipher.final("base64");
+
+  const authTag = cipher.getAuthTag().toString("base64"); // Obtenir le tag d'authentification GCM
+
+  // Combiner l'IV, l'authTag et le token chiffré dans un format sécurisé
+  const encryptedToken = `${iv.toString("base64")}.${authTag}.${encrypted}`;
+
+  // Supprimer l'ancien token s'il existe
   const existingToken = await getPasswordResetTokenByEmail(email);
-
   if (existingToken) {
     await db.passwordResetToken.delete({
       where: { id: existingToken.id },
     });
   }
 
-  const passwordResetToken = await db.passwordResetToken.create({
+  // Stocker le token chiffré dans la base de données
+  await db.passwordResetToken.create({
     data: {
       email,
-      token,
+      token: encryptedToken, // Stocker le token chiffré
       expires,
+      tokenId,
     },
   });
 
-  return passwordResetToken;
+  return encryptedToken;
+};
+
+export const verifyPasswordResetToken = async (encryptedToken: string) => {
+  try {
+    // Séparer les différentes parties du token chiffré
+    const [ivBase64, authTagBase64, encryptedBase64] =
+      encryptedToken.split(".");
+
+    // Convertir en Buffer
+    const iv = Buffer.from(ivBase64, "base64");
+    const authTag = Buffer.from(authTagBase64, "base64");
+    const encrypted = Buffer.from(encryptedBase64, "base64");
+
+    // Déchiffrer le token avec AES-256-GCM
+    const decipher = crypto.createDecipheriv("aes-256-gcm", aesSecretKey, iv);
+    decipher.setAuthTag(authTag);
+
+    // Déchiffrement du token
+    let decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]);
+
+    // Convertir le Buffer déchiffré en chaîne de caractères (UTF-8)
+    const decryptedToken = decrypted.toString("utf8");
+
+    // Vérifier le JWT déchiffré avec la clé publique RSA
+    const decodedToken = verify(decryptedToken, publicKey, {
+      algorithms: ["RS256"],
+    });
+
+    // Retourner le contenu du token si la vérification a réussi
+    return { tokenPayload: decodedToken };
+  } catch (error: any) {
+    if (error.name === "TokenExpiredError") {
+      return { error: "Token expiré" };
+    } else {
+      console.error("Erreur lors de la vérification du token :", error);
+      return { error: "Token invalide" };
+    }
+  }
 };
 
 export const generateVerificationToken = async (email: string) => {
