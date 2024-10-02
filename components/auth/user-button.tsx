@@ -14,11 +14,11 @@ import {
   AvatarImage,
   AvatarFallback,
 } from "@/components/ui/avatar";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { useSession } from "@/context/SessionContext";
 
 export const UserButton = () => {
-  const user = useCurrentUser();
+  const {user} = useSession();
 
   return (
     <DropdownMenu>
