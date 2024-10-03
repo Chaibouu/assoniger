@@ -27,6 +27,7 @@ model User {
     accounts              Account[]
     sessions              Session[]
     userDevices           UserDevice[]
+    FailedLoginAttempt    FailedLoginAttempt[]
 }
 
 model Account {
@@ -97,6 +98,13 @@ model TwoFactorConfirmation {
     @@unique([userId])
 }
 
+model FailedLoginAttempt {
+    id        String   @id @default(cuid())
+    userId    String // Clé étrangère pour l'utilisateur
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    attemptAt DateTime @default(now()) // Timestamp de la tentative
+}
+
 model UserDevice {
     id        String   @id @default(cuid())
     userId    String // Clé étrangère liée à l'utilisateur
@@ -105,5 +113,9 @@ model UserDevice {
     os        String? // Informations sur le système d'exploitation
     browser   String? // Informations sur le navigateur
     ipAddress String? // Adresse IP de l'utilisateur
+    latitude  Float? // Latitude de la géolocalisation
+    longitude Float? // Longitude de la géolocalisation
+    city      String? // Ville obtenue à partir de la géolocalisation
+    country   String? // Pays obtenu à partir de la géolocalisation
     createdAt DateTime @default(now()) // Date de la création de l'enregistrement
 }

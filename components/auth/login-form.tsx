@@ -57,7 +57,7 @@ export const LoginForm = () => {
       login({ ...values })
         .then((data) => {
           if (data?.error) {
-            form.reset();
+            // form.reset();
             setError(data.error);
           }
 

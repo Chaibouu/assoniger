@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, userAgent } from "next/server";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { db } from "@/lib/db";
@@ -7,20 +7,25 @@ import { createEncryptedJWT, generateVerificationToken } from "@/lib/tokens";
 import { createSession } from "@/data/session";
 import appConfig from "@/settings";
 import { sendVerificationEmail } from "@/lib/mail";
-import UAParser from "ua-parser-js";
+import { getGeoLocation, getIp } from "@/utils/user-agent";
+import {
+  getBackoffDelay,
+  getFailedAttempts,
+  incrementFailedAttempt,
+  resetFailedAttempts,
+} from "@/lib/backoff";
 
 export async function POST(req: Request) {
   try {
     const { email, password, rememberMe } = await req.json();
 
-    // Vérification individuelle des champs manquants
+    // Vérification des champs manquants
     if (!email) {
       return NextResponse.json(
         { error: "L'email est requis" },
         { status: 400 }
       );
     }
-
     if (!password) {
       return NextResponse.json(
         { error: "Le mot de passe est requis" },
@@ -38,14 +43,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Vérifier si l'utilisateur a confirmé son email
+    // Vérification de la confirmation de l'email
     if (!user.emailVerified) {
-      // Générer un nouveau token de vérification
       const verificationToken = await generateVerificationToken(
         user.email as string
       );
-
-      // Envoyer un nouvel email de vérification
       await sendVerificationEmail(user.email as string, verificationToken);
 
       return NextResponse.json(
@@ -57,45 +59,72 @@ export async function POST(req: Request) {
       );
     }
 
-    // Vérifier si l'utilisateur est désactivé
+    // Vérification de l'activation du compte
     if (!user.isActive) {
       return NextResponse.json(
         { error: "Votre compte est désactivé. Contactez l'administrateur." },
         { status: 403 }
       );
     }
-    // Vérifier le mot de passe
+
+    // Gestion des tentatives échouées
+    const failedAttempts = await getFailedAttempts(user.id);
+    if (failedAttempts >= appConfig.backoff.maxAttempts) {
+      const delay = getBackoffDelay(failedAttempts);
+
+      // Récupérer la dernière tentative échouée
+      const lastFailedAttempt = await db.failedLoginAttempt.findFirst({
+        where: { userId: user.id },
+        orderBy: { attemptAt: "desc" },
+      });
+
+      // Calcul du temps écoulé depuis la dernière tentative
+      const timeSinceLastAttempt = lastFailedAttempt?.attemptAt
+        ? Date.now() - new Date(lastFailedAttempt.attemptAt).getTime()
+        : 0;
+      const remainingTime = delay - timeSinceLastAttempt;
+
+      if (remainingTime > 0) {
+        const minutes = Math.ceil(remainingTime / 60000);
+        const message = `Trop de tentatives échouées. Veuillez réessayer dans ${minutes} minute(s).`;
+        return NextResponse.json({ error: message }, { status: 429 });
+      }
+    }
+
+    // Vérification du mot de passe
     const isPasswordValid = await bcrypt.compare(
       password,
       user.password as string
     );
     if (!isPasswordValid) {
+      // Incrémenter le compteur de tentatives échouées
+      await incrementFailedAttempt(user.id);
+
       return NextResponse.json(
         { error: "Mot de passe incorrect" },
         { status: 401 }
       );
     }
 
+    // Réinitialisation des tentatives échouées en cas de succès
+    await resetFailedAttempts(user.id);
+
     // Gestion des connexions multiples selon la configuration
     if (!appConfig.allowMultipleSessions) {
-      // Supprimer les anciennes sessions si les connexions multiples ne sont pas autorisées
       await db.session.deleteMany({
         where: { userId: user.id },
       });
     }
 
-    // Payload pour le JWT
+    // Génération des tokens d'accès et de rafraîchissement
     const payload = { userId: user.id, email: user.email };
-    // Générer un token d'accès chiffré avec JWE
     const accessToken = createEncryptedJWT(payload, "1h");
-
-    // Générer un token de rafraîchissement (non-JWT)
     const refreshToken = crypto.randomBytes(64).toString("hex");
 
-    // Créer la session dans la base de données
+    // Création de la session en base de données
     await createSession({
       userId: user.id,
-      sessionToken: accessToken, // Token d'accès chiffré
+      sessionToken: accessToken,
       refreshToken,
       expires: new Date(Date.now() + 60 * 60 * 1000), // 1h pour le token d'accès
       refreshTokenExpires: rememberMe
@@ -104,30 +133,31 @@ export async function POST(req: Request) {
       lastActivity: new Date(),
     });
 
-    // Extraire les informations du User-Agent
-    const userAgent = req.headers.get("user-agent") || "";
-    const parser = new UAParser(userAgent);
-    const deviceInfo = parser.getResult();
+    // Extraction des informations du user-agent et géolocalisation
+    const { device, browser, os } = userAgent(req);
+    const ipAddress = getIp();
+    const geoInfo = await getGeoLocation(ipAddress);
 
-    // Stocker les informations de l'appareil dans la table UserDevice
+    // Stocker les informations de l'appareil et de géolocalisation dans la table UserDevice
     await db.userDevice.create({
       data: {
         userId: user.id,
-        device: `${deviceInfo.device.vendor} ${deviceInfo.device.model}`, // Appareil
-        os: `${deviceInfo.os.name} ${deviceInfo.os.version}`, // Système d'exploitation
-        browser: `${deviceInfo.browser.name} ${deviceInfo.browser.version}`, // Navigateur
-        ipAddress:
-          req.headers.get("x-forwarded-for") ||
-          req.headers.get("remote-addr") ||
-          "", // Adresse IP
+        device: `${device.vendor || "Inconnu"} ${device.model || "Inconnu"}`,
+        os: `${os.name || "Inconnu"} ${os.version || ""}`,
+        browser: `${browser.name || "Inconnu"} ${browser.version || ""}`,
+        ipAddress: ipAddress || "IP inconnue",
+        latitude: geoInfo?.latitude || null,
+        longitude: geoInfo?.longitude || null,
+        city: geoInfo?.city || "Ville inconnue",
+        country: geoInfo?.country || "Pays inconnu",
       },
     });
 
-    // Renvoyer les deux tokens (access token et refresh token) au client
+    // Renvoyer les tokens au client
     return NextResponse.json({
       message: "Connexion réussie",
-      accessToken: accessToken, // Le client stockera ce token d'accès brut
-      refreshToken: refreshToken, // Le client stockera également ce token de rafraîchissement brut
+      accessToken,
+      refreshToken,
     });
   } catch (error) {
     console.error("Erreur lors de la connexion :", error);

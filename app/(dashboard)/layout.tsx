@@ -1,18 +1,14 @@
 "use client";
 import { useState } from "react";
-import { usePathname,useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import Loader from "@/components/common/Loader";
-import { authRoutes } from "@/settings/auth-routes";
-import { adminNavigation, collaboratorsNavigation, managerNavigation } from "@/settings/navigation";
+import { adminNavigation } from "@/settings/navigation";
 import "./globals.css";
 import "./data-tables-css.css";
 import "./satoshi.css";
-import { SidebarBody } from "@/components/ui/sidebar";
-import { SidebarDemo } from "@/components/Sidebarr/Sidebarr";
-import { NavigationItem } from "@/settings/navigation";
-import appConfig from "@/settings";
+import { useRouter } from "next/navigation";
+import { useSession } from "@/context/SessionContext";
 
 export default function RootLayout({
   children,
@@ -20,11 +16,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
 
-  const router = useRouter();
     
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const pathname = usePathname();
+  const { user } = useSession();
+  const router = useRouter();  
+  if (!user) {
+    router.push("/auth/login");
+    return null;
+  }
 
   return (
     <div className="dark:bg-boxdark-2 dark:text-bodydark">

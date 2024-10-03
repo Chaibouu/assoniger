@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getUser } from "./actions/getUser";
 import { applyRateLimit } from "./lib/rateLimit";
-
+import { isRouteProtected } from "./utils/is-route-protected";
 export async function middleware(req: NextRequest) {
   const { nextUrl } = req;
 
@@ -54,7 +54,7 @@ export async function middleware(req: NextRequest) {
   const result = await getUser();
 
   // Si un nouveau token est généré après rafraîchissement, mettre à jour le cookie
-  if (result.tokenInfo) {
+  if (result?.tokenInfo) {
     const response = NextResponse.next();
 
     // Mise à jour de l'accessToken dans le cookie
@@ -72,7 +72,16 @@ export async function middleware(req: NextRequest) {
   }
 
   // Si l'utilisateur est connecté
-  const isLoggedIn = !!result.user && !result.error;
+  const isLoggedIn = !!result?.user && !result.error;
+  const userRole = result?.user?.user?.role;
+
+  // **Vérification des rôles pour les routes protégées**
+  const protectedRoute = isRouteProtected(userRole, nextUrl.pathname);
+
+  // Si l'utilisateur n'est pas autorisé à accéder à la route
+  if (isLoggedIn && protectedRoute) {
+    return NextResponse.redirect(new URL("/unauthorized", nextUrl));
+  }
 
   // **Auth Routes** : Rediriger les utilisateurs connectés loin des pages de login, etc.
   if (isAuthRoute && isLoggedIn) {

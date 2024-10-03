@@ -18,7 +18,11 @@ export const getUser = async () => {
     try {
       // Utiliser le token pour récupérer les informations de l'utilisateur
       const userData = await getUserInfo(accessToken);
-      return { user: userData };
+      if (!userData.error) {
+        return { user: userData };
+      } else {
+        return { error: userData.error };
+      }
     } catch (error) {
       console.error("Erreur lors de la vérification du token d'accès:", error);
     }
@@ -31,13 +35,16 @@ export const getUser = async () => {
 
     const userData = await getUserInfo(newAccessToken);
     // Mettre à jour uniquement l'accessToken dans les cookies, car le refreshToken est déjà là
+    if (!userData.error) {
+      const tokenInfo = {
+        accessToken: newAccessToken,
+        expiresAt: accessTokenExpiresAt,
+      };
 
-    const tokenInfo = {
-      accessToken: newAccessToken,
-      expiresAt: accessTokenExpiresAt,
-    };
-
-    return { user: userData, tokenInfo }; // Retourner les informations de l'utilisateur
+      return { user: userData, tokenInfo };
+    } else {
+      return { error: userData.error };
+    }
   } catch (error) {
     console.error("Erreur lors du rafraîchissement du token:", error);
     return { error: "Erreur lors du rafraîchissement" };
