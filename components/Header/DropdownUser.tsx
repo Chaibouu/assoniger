@@ -2,7 +2,6 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import { LogoutButton } from "@/components/auth/logout-button";
 import {
   Avatar,
@@ -10,7 +9,7 @@ import {
   AvatarFallback,
 } from "@/components/ui/avatar";
 import { FaUser,FaAngleDown } from "react-icons/fa";
-import appConfig from "@/settings";
+import { useSession } from "@/context/SessionContext";
 
 
 const DropdownUser = () => {
@@ -18,8 +17,7 @@ const DropdownUser = () => {
 
   const trigger = useRef<any>(null);
   const dropdown = useRef<any>(null);
-  const user = useCurrentUser();
-
+  const {user} = useSession();
   // close on click outside
   useEffect(() => {
     const clickHandler = ({ target }: MouseEvent) => {

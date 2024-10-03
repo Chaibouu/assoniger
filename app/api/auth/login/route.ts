@@ -14,6 +14,7 @@ import {
   incrementFailedAttempt,
   resetFailedAttempts,
 } from "@/lib/backoff";
+import { LoginSchema } from "@/schemas";
 
 export async function POST(req: Request) {
   try {
@@ -29,6 +30,21 @@ export async function POST(req: Request) {
     if (!password) {
       return NextResponse.json(
         { error: "Le mot de passe est requis" },
+        { status: 400 }
+      );
+    }
+
+    // Validation des données avec Zod
+    const parsedData = LoginSchema.safeParse({ email });
+
+    // Si la validation échoue, renvoyer les erreurs de Zod
+    if (!parsedData.success) {
+      return NextResponse.json(
+        {
+          error: parsedData.error.issues
+            .map((issue) => issue.message)
+            .join(", "),
+        },
         { status: 400 }
       );
     }

@@ -4,12 +4,12 @@ import { db } from "@/lib/db";
 import { getUserByEmail } from "@/data/user";
 import { generateVerificationToken } from "@/lib/tokens";
 import { sendVerificationEmail } from "@/lib/mail"; // Fonction pour envoyer l'email de vérification
+import { SignupSchema } from "@/schemas";
 
 export async function POST(req: Request) {
   try {
     const { name, email, password } = await req.json();
 
-    // Vérification des champs requis
     if (!name) {
       return NextResponse.json({ error: "Le nom est requis" }, { status: 400 });
     }
@@ -22,6 +22,21 @@ export async function POST(req: Request) {
     if (!password) {
       return NextResponse.json(
         { error: "Le mot de passe est requis" },
+        { status: 400 }
+      );
+    }
+
+    // Validation des données avec Zod
+    const parsedData = SignupSchema.safeParse({ name, email, password });
+
+    // Si la validation échoue, renvoyer les erreurs de Zod
+    if (!parsedData.success) {
+      return NextResponse.json(
+        {
+          error: parsedData.error.issues
+            .map((issue) => issue.message)
+            .join(", "),
+        },
         { status: 400 }
       );
     }

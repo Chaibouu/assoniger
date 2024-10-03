@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BeatLoader } from "react-spinners";
 import { useSearchParams } from "next/navigation";
 
-import { verifyUserToken } from "@/actions/verifyUserToken"; // Import de l'action actualisée
+import { verifyUserToken } from "@/actions/verifyUserToken";
 import { CardWrapper } from "@/components/auth/card-wrapper";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
@@ -20,9 +20,6 @@ export const NewVerificationForm = () => {
   const onSubmit = useCallback(async () => {
     if (success || error || !token) return; // Empêcher une nouvelle soumission si la requête a déjà réussi ou échoué
     const decodedToken = decodeURIComponent(token);
-    console.log('Le championnnnn==========================');
-    console.log(decodedToken);
-    console.log('====================================');
     setIsLoading(true);
     const result = await verifyUserToken(decodedToken);
 

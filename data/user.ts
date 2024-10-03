@@ -30,7 +30,8 @@ export async function getUserById(userId: string) {
         name: true,
         email: true,
         role: true,
-        isActive: true, // Ajoute les champs que tu veux récupérer
+        isActive: true,
+        image: true,
       },
     });
 

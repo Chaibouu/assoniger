@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { getUserIdFromToken } from "@/lib/tokens"; // Fonction pour déchiffrer le token et récupérer l'ID utilisateur
-import { getUserById } from "@/data/user"; // Fonction pour récupérer l'utilisateur par ID
+import { getUserIdFromToken } from "@/lib/tokens";
+import { getUserById } from "@/data/user";
+import { headers } from "next/headers";
 
-export async function GET(req: Request) {
+// Forcer le rendu dynamique
+export const dynamic = "force-dynamic";
+export async function GET() {
   try {
     // Récupérer le token d'accès depuis les cookies ou l'en-tête Authorization
-    const token = req.headers.get("Authorization")?.split(" ")[1];
-
+    const headersList = headers();
+    const token = headersList.get("Authorization")?.split(" ")[1];
     if (!token) {
       return NextResponse.json({ error: "Token manquant" }, { status: 401 });
     }

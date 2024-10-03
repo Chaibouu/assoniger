@@ -1,10 +1,9 @@
 "use client";
 
 import { UserInfo } from "@/components/user-info";
-import { useCurrentUser } from "@/hooks/use-current-user";
-
+import { useSession } from "@/context/SessionContext";
 const ClientPage = () => {
-  const user = useCurrentUser();
+  const user = useSession();
 
   return ( 
     <UserInfo

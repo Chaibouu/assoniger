@@ -6,4 +6,5 @@ export type User = {
   role: UserRole;
   name: string;
   isActive: boolean;
+  image?: string;
 };

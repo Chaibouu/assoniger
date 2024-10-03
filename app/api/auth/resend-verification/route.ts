@@ -2,19 +2,31 @@ import { NextResponse } from "next/server";
 import { getUserByEmail } from "@/data/user";
 import { generateVerificationToken } from "@/lib/tokens";
 import { sendVerificationEmail } from "@/lib/mail";
+import { ResendVerificationSchema } from "@/schemas";
 
 export async function POST(req: Request) {
   try {
     const { email } = await req.json();
 
-    // Vérification du champ email manquant
     if (!email) {
       return NextResponse.json(
-        { error: "L'email est requis" },
+        { error: "L'adresse email est requise" },
         { status: 400 }
       );
     }
-
+    // Validation des données avec Zod
+    const parsedData = ResendVerificationSchema.safeParse({ email });
+    // Si la validation échoue, renvoyer les erreurs de Zod
+    if (!parsedData.success) {
+      return NextResponse.json(
+        {
+          error: parsedData.error.issues
+            .map((issue) => issue.message)
+            .join(", "),
+        },
+        { status: 400 }
+      );
+    }
     // Recherche de l'utilisateur par email
     const user = await getUserByEmail(email);
 

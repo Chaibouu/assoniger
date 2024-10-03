@@ -18,7 +18,9 @@ export const sendTwoFactorTokenEmail = async (email: string, token: string) => {
 };
 
 export const sendPasswordResetEmail = async (email: string, token: string) => {
-  const resetLink = `${domain}/auth/new-password?token=${token}`;
+  const encodedToken = encodeURIComponent(token);
+
+  const resetLink = `${domain}/auth/reset-password?token=${encodedToken}`;
 
   const mailOptions = {
     from: `${appConfig.appName} ${emailUser}`,
@@ -31,7 +33,7 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
 
 export const sendVerificationEmail = async (email: string, token: string) => {
   const encodedToken = encodeURIComponent(token);
-  const confirmLink = `${domain}/auth/new-verification?token=${encodedToken}`;
+  const confirmLink = `${domain}/auth/verify?token=${encodedToken}`;
 
   const mailOptions = {
     from: `${appConfig.appName} ${emailUser}`,
