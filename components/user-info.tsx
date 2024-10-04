@@ -1,4 +1,3 @@
-import { ExtendedUser } from "@/next-auth";
 import { 
   Card, 
   CardContent, 
@@ -7,7 +6,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 interface UserInfoProps {
-  user?: ExtendedUser;
+  user?: any;
   label: string;
 };
 

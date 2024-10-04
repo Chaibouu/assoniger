@@ -1,6 +1,5 @@
 "use client";
 
-import { admin } from "@/actions/admin";
 import { RoleGate } from "@/components/auth/role-gate";
 import { FormSuccess } from "@/components/form-success";
 import { Button } from "@/components/ui/button";
@@ -10,16 +9,16 @@ import { toast } from "sonner";
 
 const AdminPage = () => {
   const onServerActionClick = () => {
-    admin()
-      .then((data) => {
-        if (data.error) {
-          toast.error(data.error);
-        }
+    // admin()
+    //   .then((data) => {
+    //     if (data.error) {
+    //       toast.error(data.error);
+    //     }
 
-        if (data.success) {
-          toast.success(data.success);
-        }
-      })
+    //     if (data.success) {
+    //       toast.success(data.success);
+    //     }
+    //   })
   }
   
   const onApiRouteClick = () => {
