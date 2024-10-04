@@ -9,6 +9,7 @@ import "./data-tables-css.css";
 import "./satoshi.css";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/context/SessionContext";
+import { Sidebar2 } from "@/components/Sidebar2/Sidebar2";
 
 export default function RootLayout({
   children,
@@ -30,14 +31,14 @@ export default function RootLayout({
       <div className="flex h-screen overflow-hidden">
         {/* <!-- ===== Sidebar Start ===== --> */}
         {/* <Sidebar navigation={adminNavigation} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} /> */}
-        <SidebarDemo />
+        <Sidebar2 />
 
         {/* <!-- ===== Sidebar End ===== --> */}
 
         {/* <!-- ===== Content Area Start ===== --> */}
         <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
           {/* <!-- ===== Header Start ===== --> */}
-          <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+          {/* <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} /> */}
           {/* <!-- ===== Header End ===== --> */}
 
           {/* <!-- ===== Main Content Start ===== --> */}

@@ -1,7 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import Link, { LinkProps } from "next/link";
-import React, { useState, createContext, useContext } from "react";
+import React, { useState, createContext, useContext, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { IconMenu2, IconX } from "@tabler/icons-react";
 import { Icon } from '@iconify/react';
@@ -36,6 +36,30 @@ export const useSidebar = () => {
   return context;
 };
 
+// export const SidebarProvider = ({
+//   children,
+//   open: openProp,
+//   setOpen: setOpenProp,
+//   animate = true,
+// }: {
+//   children: React.ReactNode;
+//   open?: boolean;
+//   setOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+//   animate?: boolean;
+// }) => {
+//   const [openState, setOpenState] = useState(false);
+
+//   const open = openProp !== undefined ? openProp : openState;
+//   const setOpen = setOpenProp !== undefined ? setOpenProp : setOpenState;
+
+//   return (
+//     <SidebarContext.Provider value={{ open, setOpen, animate: animate }}>
+//       {children}
+//     </SidebarContext.Provider>
+//   );
+// };
+
+
 export const SidebarProvider = ({
   children,
   open: openProp,
@@ -48,16 +72,36 @@ export const SidebarProvider = ({
   animate?: boolean;
 }) => {
   const [openState, setOpenState] = useState(false);
+  const [isTablet, setIsTablet] = useState(false); // État pour détecter les tablettes
 
   const open = openProp !== undefined ? openProp : openState;
   const setOpen = setOpenProp !== undefined ? setOpenProp : setOpenState;
 
+  // Effet pour détecter si l'utilisateur est en mode tablette
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 425px) and (max-width: 868px)");
+
+    const handleTabletChange = (event: MediaQueryListEvent) => {
+      setIsTablet(event.matches);
+    };
+
+    // Définir l'état initial et écouter les changements de taille
+    setIsTablet(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleTabletChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleTabletChange);
+    };
+  }, []);
+
   return (
-    <SidebarContext.Provider value={{ open, setOpen, animate: animate }}>
+    <SidebarContext.Provider value={{ open, setOpen, animate: isTablet }}>
       {children}
     </SidebarContext.Provider>
   );
 };
+//========================================================================
+
 
 export const Sidebar = ({
   children,
@@ -96,7 +140,7 @@ export const DesktopSidebar = ({
     <>
       <motion.div
         className={cn(
-          "h-full px-4 py-4 hidden  md:flex md:flex-col bg-neutral-100 dark:bg-neutral-800 w-[300px] flex-shrink-0",
+          "h-full px-4 py-4 hidden  sm:flex sm:flex-col bg-neutral-100 dark:bg-neutral-800 w-[300px] flex-shrink-0",
           className
         )}
         animate={{
@@ -122,7 +166,7 @@ export const MobileSidebar = ({
     <>
       <div
         className={cn(
-          "h-10 px-4 py-4 flex flex-row md:hidden  items-center justify-between bg-neutral-100 dark:bg-neutral-800 w-full"
+          "h-10 px-4 py-4 flex flex-row sm:hidden  items-center justify-between bg-neutral-100 dark:bg-neutral-800 w-full"
         )}
         {...props}
       >
@@ -172,10 +216,18 @@ export const SidebarLink = ({
   className?: string;
   props?: LinkProps;
 }) => {
-  const { open, animate } = useSidebar();
+  const { open, setOpen, animate } = useSidebar(); // Accès à setOpen pour fermer la sidebar
   const [isOpen, setIsOpen] = useState(false); // État pour gérer l'affichage des sous-onglets
 
-  const toggleOpen = () => setIsOpen(!isOpen); // Fonction pour basculer l'état
+  const toggleOpen = () => setIsOpen(!isOpen); // Fonction pour basculer l'état des sous-onglets
+
+  // Fonction pour gérer le clic sur un lien
+  const handleLinkClick = () => {
+    if (setOpen) {
+      setOpen(false); // Fermer la sidebar après un clic sur un lien
+    }
+  };
+
 
   return (
     <div>
@@ -185,7 +237,8 @@ export const SidebarLink = ({
           "flex items-center justify-start gap-2 group/sidebar py-2 cursor-pointer",
           className
         )}
-        onClick={link.children ? toggleOpen : undefined} // Ouvrir/fermer les sous-onglets seulement s'il y a des enfants
+        // onClick={link.children ? toggleOpen : undefined} // Ouvrir/fermer les sous-onglets seulement s'il y a des enfants
+        onClick={link.children ? toggleOpen : handleLinkClick} // Fermer la sidebar ou ouvrir les sous-onglets
       >
 
      <Link
@@ -194,6 +247,7 @@ export const SidebarLink = ({
           "flex items-center justify-start gap-2  group/sidebar py-2",
           className
         )}
+        onClick={link.children ? undefined : handleLinkClick} // Fermer seulement si pas d'enfants
         {...props}
       >
             {/* Vérification si link.icon est une chaîne ou un élément React */}

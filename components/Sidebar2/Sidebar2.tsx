@@ -11,11 +11,11 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { adminNavigation, collaboratorsNavigation, managerNavigation } from "@/settings/navigation";
+import { adminNavigation} from "@/settings/navigation";
 import appConfig from "@/settings";
 
 
-export function SidebarDemo() {
+export function Sidebar2() {
   // const links = [
   //   {
   //     label: "Dashboard",
@@ -50,11 +50,12 @@ export function SidebarDemo() {
   return (
     <div
       className={cn(
-        "rounded-md flex flex-col md:flex-row bg-red-300 dark:bg-neutral-800  mx-auto border border-neutral-200 dark:border-neutral-700 overflow-hidden",
-        "h-[100vh]" // for your use case, use `h-screen` instead of `h-[60vh]`
+        "rounded-md flex flex-col md:flex-row bg-gray-100 dark:bg-neutral-800  mx-auto border border-neutral-200 dark:border-neutral-700 overflow-hidden",
+        "sm:h-[100vh]", // for your use case, use `h-screen` instead of `h-[60vh]`
+        "h-[6vh]"
       )}
     >
-      <Sidebar open={open} setOpen={setOpen} animate={false}>
+      <Sidebar open={open} setOpen={setOpen} animate={true}>
         <SidebarBody className="justify-between gap-10">
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
             <>
@@ -91,7 +92,7 @@ export function SidebarDemo() {
 }
 export const Logo = () => {
   return (
-    <div className="flex items-center justify-between">
+    <div className="">
       <Link
       href="#"
       className="font-normal flex space-x-2 items-center text-sm text-black py-1 relative z-20"
@@ -112,9 +113,6 @@ export const Logo = () => {
         {appConfig.appName}
         </motion.span>
       </Link>
-      <div>
-        <svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 48 48" className="rotate-90"><g fill="none" stroke="#969292" stroke-linecap="round" stroke-width="3.5"><path stroke-linejoin="round" d="M40 28L24 40L8 28"/><path d="M8 10h32M8 18h32"/></g></svg>
-      </div>
     </div>
   );
 };
