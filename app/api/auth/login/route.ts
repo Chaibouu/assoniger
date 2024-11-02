@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     }
 
     // Validation des données avec Zod
-    const parsedData = LoginSchema.safeParse({ email });
+    const parsedData = LoginSchema.safeParse({ email, password });
 
     // Si la validation échoue, renvoyer les erreurs de Zod
     if (!parsedData.success) {

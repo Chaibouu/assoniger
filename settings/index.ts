@@ -1,9 +1,9 @@
 const appConfig = {
   appName: "Sahel Coders Starter",
   websiteTitle: "Website Starter",
-  websiteDescription:
-    "Sahel Coders simple authentication service and admin panel",
+  websiteDescription:"Sahel Coders simple authentication service and admin panel",
   logoUrl: "/logo.jpg",
+  sidebarClearlogoUrl: "/sahel_coders_logo.png",
   adminSidebarColor: "#1C2434",
   mailOptions: {
     host: process.env.MAIL_HOST,

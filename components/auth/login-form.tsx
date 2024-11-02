@@ -7,12 +7,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
-
 import { LoginSchema } from "@/schemas";
 import { Input } from "@/components/ui/input";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
 import { login } from "@/actions/login";
+import { Checkbox } from "../ui/checkbox";
+
 
 export const LoginForm = () => {
   const searchParams = useSearchParams();
@@ -151,16 +153,41 @@ export const LoginForm = () => {
                           )}
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="link"
-                        asChild
-                        className="px-0 font-normal"
-                      >
-                        <Link href="/auth/forgot-password">
-                          Forgot password?
-                        </Link>
-                      </Button>
+                      
+                      <div className="flex items-center justify-around my-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant="link"
+                          asChild
+                          className="px-0 font-normal hover:text-gray-400"
+                        >
+                          <Link href="/auth/forgot-password" className="text-[14px]">
+                            Forgot password?
+                          </Link>
+                        </Button>
+                        {/* Checkbox Remember Me */}
+                        <div className="flex items-center space-x-2 cursor-pointer hover:text-gray-400">
+                           <FormField
+                              control={form.control}
+                              name="rememberMe"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 cursor-pointer">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none cursor-pointer">
+                                    <FormLabel>
+                                        Remember me
+                                    </FormLabel>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />  
+                        </div>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
