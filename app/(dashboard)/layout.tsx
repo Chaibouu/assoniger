@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/context/SessionContext";
 import { SidebarClear } from "@/components/Sidebarr/SidebarClear/SidebarClear";
 import HeaderClear from "@/components/Sidebarr/SidebarClear/Header";
+import { Sidebar2 } from "@/components/Sidebar2/Sidebar2";
 
 export default function RootLayout({
   children,
@@ -32,7 +33,7 @@ export default function RootLayout({
       <div className="flex h-screen overflow-hidden">
         {/* <!-- ===== Sidebar Start ===== --> */}
         {/* <Sidebar navigation={adminNavigation} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} /> */}
-        <SidebarClear open={sidebarOpen} setOpen={setSidebarOpen}/>
+        <SidebarClear/>
         {/* <!-- ===== Sidebar End ===== --> */}
 
         {/* <!-- ===== Content Area Start ===== --> */}
