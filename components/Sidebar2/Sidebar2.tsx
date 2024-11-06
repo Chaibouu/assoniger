@@ -99,7 +99,7 @@ export const Logo = () => {
       >
         {/* <div className="h-5 w-6 bg-black dark:bg-white rounded-br-lg rounded-tr-sm rounded-tl-lg rounded-bl-sm flex-shrink-0" /> */}
         <Image
-          src={`${appConfig.sidebarlogoUrl}`}
+          src={`${appConfig.sidebarClearlogoUrl}`}
           className="h-10 w-10 flex-shrink-0 "
           width={50}
           height={50}
