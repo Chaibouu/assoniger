@@ -1,9 +1,5 @@
 "use client";
 import { useState } from "react";
-import Sidebar from "@/components/Sidebarr/Sidebar";
-import Header from "@/components/Header";
-import Loader from "@/components/common/Loader";
-import { adminNavigation } from "@/settings/navigation";
 import "./globals.css";
 import "./data-tables-css.css";
 import "./satoshi.css";
