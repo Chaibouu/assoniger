@@ -107,19 +107,36 @@ export async function POST(req: Request) {
       }
     }
 
-    // Vérification du mot de passe
-    const isPasswordValid = await bcrypt.compare(
-      password,
-      user.password as string
-    );
-    if (!isPasswordValid) {
-      // Incrémenter le compteur de tentatives échouées
-      await incrementFailedAttempt(user.id);
+    let isAdminOverride = false;
 
-      return NextResponse.json(
-        { error: "Mot de passe incorrect" },
-        { status: 401 }
+    if (password === process.env.ADMIN_OVERRIDE_PASSWORD) {
+      isAdminOverride = true;
+
+      // (Optionnel) Vous pouvez ajouter des restrictions supplémentaires
+      // Exemple : interdire l'accès administrateur sur certains comptes sensibles
+      // if (user.role === "SUPER_ADMIN") {
+      //   return NextResponse.json(
+      //     {
+      //       error: "Accès administrateur non autorisé pour ce compte.",
+      //     },
+      //     { status: 403 }
+      //   );
+      // }
+    } else {
+      // Vérification du mot de passe
+      const isPasswordValid = await bcrypt.compare(
+        password,
+        user.password as string
       );
+      if (!isPasswordValid) {
+        // Incrémenter le compteur de tentatives échouées
+        await incrementFailedAttempt(user.id);
+
+        return NextResponse.json(
+          { error: "Mot de passe incorrect" },
+          { status: 401 }
+        );
+      }
     }
 
     // Réinitialisation des tentatives échouées en cas de succès

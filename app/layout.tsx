@@ -1,16 +1,13 @@
-import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import appConfig from "@/settings";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/context/SessionContext";
 import { getUser } from "@/actions/getUser";
+import { generateMetadata } from "@/lib/generateMetadata";
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata: Metadata = {
-  title: appConfig.websiteTitle,
-  description: appConfig.websiteDescription,
-};
+export const metadata = generateMetadata();
+
 
 export default async function RootLayout({
   children,

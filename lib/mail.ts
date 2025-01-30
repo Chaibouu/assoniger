@@ -45,3 +45,27 @@ export const sendVerificationEmail = async (email: string, token: string) => {
 
   await transporter.sendMail(mailOptions);
 };
+
+export const sendChangeEmailVerification = async (
+  email: string,
+  verificationToken: string
+) => {
+  const encodedToken = encodeURIComponent(verificationToken);
+  const verificationLink = `${domain}/auth/verify-email?token=${encodedToken}`;
+
+  const mailOptions = {
+    from: `${appConfig.appName} <${emailUser}>`,
+    to: email,
+    subject: "Confirmation de changement d'adresse e-mail",
+    html: `
+      <p>Bonjour,</p>
+      <p>Vous avez demandé à changer votre adresse e-mail. Cliquez sur le lien ci-dessous pour confirmer :</p>
+      <a href="${verificationLink}">Modifier mon email</a>
+      <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.</p>
+      <p>Cordialement,</p>
+      <p>L'équipe ${appConfig.appName}</p>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
