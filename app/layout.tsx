@@ -6,6 +6,8 @@ import { getUser } from "@/actions/getUser";
 import { generateMetadata as generateAppMetadata } from "@/lib/generateMetadata";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
+import NextTopLoader from 'nextjs-toploader';
+import appConfig from "@/settings";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +36,10 @@ export default async function RootLayout({
         <ErrorBoundary>
           <Suspense fallback={<div>Loading...</div>}>
             <SessionProvider user={user?.user}>
+            <NextTopLoader
+            color={appConfig.primaryColor}
+            showSpinner={false}
+            />
               {children}
               <Toaster />
             </SessionProvider>

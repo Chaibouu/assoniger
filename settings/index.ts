@@ -1,7 +1,8 @@
 const appConfig = {
   appName: "Sahel Coders Starter",
   websiteTitle: "Website Starter",
-  websiteDescription:"Sahel Coders simple authentication service and admin panel",
+  websiteDescription:
+    "Sahel Coders simple authentication service and admin panel",
   logoUrl: "/logo.jpg",
   sidebarClearlogoUrl: "/sahel_coders_logo.png",
   adminSidebarColor: "#1C2434",
@@ -16,6 +17,7 @@ const appConfig = {
   },
   publicRoutes: ["/"],
   defaultLoginRedirect: "/test",
+  primaryColor: "#148D21",
 
   // Ajout d'une option pour autoriser ou non les connexions multiples
   allowMultipleSessions: false, // ou false pour invalider les anciennes sessions
