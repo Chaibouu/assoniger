@@ -10,7 +10,7 @@ export async function makeAuthenticatedRequest(
   contentType?: string
 ) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
 
     // Récupérer le token d'accès et le token de rafraîchissement depuis les cookies
     let accessToken = cookieStore.get("accessToken")?.value;
@@ -71,7 +71,7 @@ export async function makeAuthenticatedRequest(
         await refreshUserToken(refreshToken);
 
       // Mettre à jour l'accessToken dans les cookies
-      cookies().set("accessToken", newAccessToken, {
+     cookieStore.set("accessToken", newAccessToken, {
         httpOnly: true,
         secure: true,
         maxAge: accessTokenExpiresAt, // Définir l'expiration du token d'accès

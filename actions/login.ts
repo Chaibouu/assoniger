@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { LoginSchema } from "@/schemas";
 import { setMultipleCookies } from "./setMultipleCookies";
 
@@ -43,7 +42,6 @@ export const login = async (data: {
     const { accessToken, refreshToken } = result;
 
     // Configuration des cookies pour les tokens
-    const cookieStore = cookies();
 
     // Cookie pour le token d'accès
     await setMultipleCookies([

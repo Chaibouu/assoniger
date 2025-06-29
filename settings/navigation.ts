@@ -15,7 +15,13 @@ export const adminNavigation: NavigationItem[] = [
   {
     title: "Dashboard",
     icon: "material-symbols:dashboard",
-    path: "/admin",
+    path: "/dashboard",
+    allowedRoles: ["USER"],
+  },
+  {
+    title: "Blogs",
+    icon: "material-symbols:home-work",
+    path: "/blogs",
     allowedRoles: ["USER"],
   },
   {

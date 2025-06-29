@@ -16,7 +16,7 @@ export const setMultipleCookies = async (
     };
   }[]
 ) => {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   // Boucler sur les cookies et les définir
   cookieData.forEach(({ name, value, options }) => {

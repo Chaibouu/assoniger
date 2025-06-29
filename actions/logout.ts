@@ -5,7 +5,7 @@ import { refreshUserToken } from "@/lib/user";
 
 export const logout = async () => {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
 
     // Récupérer les tokens d'accès et de rafraîchissement
     let accessToken = cookieStore.get("accessToken")?.value;
