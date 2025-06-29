@@ -168,7 +168,7 @@ export async function POST(req: Request) {
 
     // Extraction des informations du user-agent et géolocalisation
     const { device, browser, os } = userAgent(req);
-    const ipAddress = getIp();
+    const ipAddress = await getIp();
     const geoInfo = await getGeoLocation(ipAddress);
 
     // Stocker les informations de l'appareil et de géolocalisation dans la table UserDevice

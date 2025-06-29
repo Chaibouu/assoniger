@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     // Récupérer le token d'accès depuis les cookies ou l'en-tête Authorization
-    const headersList = headers();
+    const headersList = await headers();
     const token = headersList.get("Authorization")?.split(" ")[1];
     if (!token) {
       return NextResponse.json({ error: "Token manquant" }, { status: 401 });

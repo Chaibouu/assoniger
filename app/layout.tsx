@@ -3,24 +3,43 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/context/SessionContext";
 import { getUser } from "@/actions/getUser";
-import { generateMetadata } from "@/lib/generateMetadata";
+import { generateMetadata as generateAppMetadata } from "@/lib/generateMetadata";
+import { Suspense } from "react";
+import { ErrorBoundary } from "@/components/error-boundary";
+
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata = generateMetadata();
-
+// Utiliser la nouvelle API de métadonnées de Next.js 15
+export async function generateMetadata() {
+  return await generateAppMetadata();
+}
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const {user} = await getUser();
+  let user = null;
+  
+  try {
+    const result = await getUser();
+    user = result?.user;
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'utilisateur:", error);
+  }
+
   return (
-    <SessionProvider user={user?.user}>
-      <html lang="en">
-        <Toaster />
-        <body className={inter.className}>{children}</body>
-      </html>
-   </SessionProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ErrorBoundary>
+          <Suspense fallback={<div>Loading...</div>}>
+            <SessionProvider user={user?.user}>
+              {children}
+              <Toaster />
+            </SessionProvider>
+          </Suspense>
+        </ErrorBoundary>
+      </body>
+    </html>
   );
 }

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 
 export const refresh = async () => {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const refreshToken = cookieStore.get("refreshToken")?.value;
 
     if (!refreshToken) {

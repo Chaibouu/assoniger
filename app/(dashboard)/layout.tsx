@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./globals.css";
 import "./data-tables-css.css";
 import "./satoshi.css";
@@ -8,19 +8,34 @@ import { useSession } from "@/context/SessionContext";
 import { SidebarClear } from "@/components/Sidebarr/SidebarClear/SidebarClear";
 import HeaderClear from "@/components/Sidebarr/SidebarClear/Header";
 import { Sidebar2 } from "@/components/Sidebar2/Sidebar2";
+import { Loader } from "@/components/common/Loader";
 
-export default function RootLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-
-    
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user } = useSession();
-  const router = useRouter();  
-  if (!user) {
-    router.push("/auth/login");
+  const [isLoading, setIsLoading] = useState(true);
+  const { user, isAuthenticated } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Vérifier l'authentification après le montage du composant
+    if (!isAuthenticated && !user) {
+      router.push("/auth/login");
+    } else {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, user, router]);
+
+  // Afficher un loader pendant la vérification de l'authentification
+  if (isLoading) {
+    return <Loader />;
+  }
+
+  // Rediriger si l'utilisateur n'est pas authentifié
+  if (!isAuthenticated && !user) {
     return null;
   }
 

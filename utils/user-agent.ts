@@ -1,9 +1,10 @@
 import { headers } from "next/headers";
 
 // Fonction pour récupérer l'adresse IP
-export function getIp() {
-  const forwardedFor = headers().get("x-forwarded-for");
-  const realIp = headers().get("x-real-ip");
+export async function getIp() {
+  const headersList = await headers()
+  const forwardedFor = headersList.get("x-forwarded-for");
+  const realIp = headersList.get("x-real-ip");
 
   if (forwardedFor) {
     return forwardedFor.split(",")[0].trim();

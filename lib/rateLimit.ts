@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import appConfig from "@/settings";
+import { getClientIP } from "./geo";
 
 const rateLimitMap = new Map<string, { count: number; lastRequest: number }>();
 
 export async function applyRateLimit(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") || req.ip || "127.0.0.1";
+  const ip = getClientIP(req);
   const { max, windowMs } = appConfig.rateLimit;
 
   // Vérifier si l'IP a déjà fait des requêtes
