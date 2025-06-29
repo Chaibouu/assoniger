@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getBlogAction } from "@/actions/blog-actions";
 import { BlogDetail } from "@/components/blog/BlogDetail";
-import { BlogPosts } from "@/components/blog/BlogPosts";
 import { PostsListSkeleton } from "@/components/skeletons";
 
 // Composant pour récupérer les informations du blog
@@ -40,8 +39,6 @@ export default async function BlogPage({
       <Suspense fallback={<PostsListSkeleton />}>
         <BlogInfo blogId={blogId} />
       </Suspense>
-      
-      <BlogPosts blogId={blogId} />
     </div>
   );
 } 
