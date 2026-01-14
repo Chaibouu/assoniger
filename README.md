@@ -22,6 +22,18 @@ Un starter moderne et performant pour applications web avec Next.js 15, React 19
 - **Code splitting** intelligent
 - **Hot reload** plus rapide
 
+### 🆕 **Nouvelles fonctionnalités ajoutées**
+- ✅ **Système de logging structuré** (`lib/logger.ts`)
+- ✅ **Health check endpoint** (`/api/health`)
+- ✅ **Gestion centralisée des erreurs** (`lib/errors.ts`)
+- ✅ **Système d'upload de fichiers** (`lib/upload.ts`)
+- ✅ **Configuration de tests** (Jest + React Testing Library)
+- ✅ **Dockerfile** pour le déploiement
+- ✅ **CI/CD avec GitHub Actions**
+- ✅ **Documentation complète** (CONTRIBUTING.md, IMPROVEMENTS.md)
+
+> 📖 Voir [IMPROVEMENTS.md](./IMPROVEMENTS.md) pour plus de détails sur les améliorations
+
 ## 🛠️ Technologies utilisées
 
 - **Framework**: Next.js 15.3.4
@@ -169,6 +181,11 @@ npm run type-check       # Vérification TypeScript
 npm run format           # Formatage avec Prettier
 npm run format:check     # Vérification du formatage
 
+# Tests
+npm test                 # Lancer les tests
+npm run test:watch       # Tests en mode watch
+npm run test:coverage    # Tests avec couverture
+
 # Base de données
 npm run db:push          # Pousser le schéma
 npm run db:migrate       # Créer une migration
@@ -202,10 +219,22 @@ npm i -g vercel
 vercel
 ```
 
+### Docker
+```bash
+# Build de l'image
+docker build -t website-starter .
+
+# Lancer le conteneur
+docker run -p 3000:3000 \
+  -e DATABASE_URL="your-database-url" \
+  -e JWT_SECRET="your-jwt-secret" \
+  website-starter
+```
+
 ### Autres plateformes
 - **Netlify**: Compatible avec les builds statiques
 - **Railway**: Support complet de Next.js
-- **Docker**: Dockerfile inclus
+- **Docker**: Dockerfile inclus (voir ci-dessus)
 
 ## 🤝 Contribution
 
