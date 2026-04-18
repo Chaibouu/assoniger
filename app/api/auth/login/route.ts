@@ -6,8 +6,8 @@ import { getUserByEmail } from "@/data/user";
 import { createEncryptedJWT, generateVerificationToken } from "@/lib/tokens";
 import { createSession } from "@/data/session";
 import appConfig from "@/settings";
-import { sendVerificationEmail } from "@/lib/mail";
-import { getGeoLocation, getIp } from "@/utils/user-agent";
+import { sendVerificationEmail, sendLoginNotificationEmail } from "@/lib/mail";
+import { getGeoInfo, getClientIP } from "@/lib/geo";
 import {
   getBackoffDelay,
   getFailedAttempts,
@@ -15,67 +15,51 @@ import {
   resetFailedAttempts,
 } from "@/lib/backoff";
 import { LoginSchema } from "@/schemas";
+import { audit } from "@/lib/audit";
+import { checkPasswordPwned } from "@/lib/hibp";
+import { rateLimitRedisAuth } from "@/lib/rateLimit";
+import type { NextRequest } from "next/server";
 
-export async function POST(req: Request) {
+function hashRefreshToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+export async function POST(req: NextRequest) {
   try {
+    // ─── Rate limiting Redis (couche 2 — persistant multi-instance) ──────────
+    const ip = getClientIP(req);
+    const rlResponse = await rateLimitRedisAuth(ip);
+    if (rlResponse) return rlResponse;
+
     const { email, password, rememberMe } = await req.json();
 
-    // Vérification des champs manquants
-    if (!email) {
-      return NextResponse.json(
-        { error: "L'email est requis" },
-        { status: 400 }
-      );
-    }
-    if (!password) {
-      return NextResponse.json(
-        { error: "Le mot de passe est requis" },
-        { status: 400 }
-      );
-    }
+    if (!email) return NextResponse.json({ error: "L'email est requis" }, { status: 400 });
+    if (!password) return NextResponse.json({ error: "Le mot de passe est requis" }, { status: 400 });
 
-    // Validation des données avec Zod
     const parsedData = LoginSchema.safeParse({ email, password });
-
-    // Si la validation échoue, renvoyer les erreurs de Zod
     if (!parsedData.success) {
       return NextResponse.json(
-        {
-          error: parsedData.error.issues
-            .map((issue) => issue.message)
-            .join(", "),
-        },
+        { error: parsedData.error.issues.map((i) => i.message).join(", ") },
         { status: 400 }
       );
     }
 
-    // Recherche de l'utilisateur par email
     const user = await getUserByEmail(email);
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Utilisateur non trouvé" },
-        { status: 401 }
-      );
+      await audit({ action: "LOGIN_FAILURE", ipAddress: ip, status: "FAILURE", metadata: { email, reason: "Email introuvable" } });
+      return NextResponse.json({ error: "Email ou mot de passe incorrect" }, { status: 401 });
     }
 
-    // Vérification de la confirmation de l'email
     if (!user.emailVerified) {
-      const verificationToken = await generateVerificationToken(
-        user.email as string
-      );
+      const verificationToken = await generateVerificationToken(user.email as string);
       await sendVerificationEmail(user.email as string, verificationToken);
-
       return NextResponse.json(
-        {
-          error:
-            "Veuillez vérifier votre email avant de vous connecter. Un nouvel email de vérification a été envoyé.",
-        },
+        { error: "Veuillez vérifier votre email. Un nouvel email de vérification a été envoyé." },
         { status: 403 }
       );
     }
 
-    // Vérification de l'activation du compte
     if (!user.isActive) {
       return NextResponse.json(
         { error: "Votre compte est désactivé. Contactez l'administrateur." },
@@ -83,114 +67,114 @@ export async function POST(req: Request) {
       );
     }
 
-    // Gestion des tentatives échouées
+    // ─── Backoff progressif ───────────────────────────────────────────────────
     const failedAttempts = await getFailedAttempts(user.id);
     if (failedAttempts >= appConfig.backoff.maxAttempts) {
       const delay = getBackoffDelay(failedAttempts);
-
-      // Récupérer la dernière tentative échouée
-      const lastFailedAttempt = await db.failedLoginAttempt.findFirst({
+      const lastFailed = await db.failedLoginAttempt.findFirst({
         where: { userId: user.id },
         orderBy: { attemptAt: "desc" },
       });
-
-      // Calcul du temps écoulé depuis la dernière tentative
-      const timeSinceLastAttempt = lastFailedAttempt?.attemptAt
-        ? Date.now() - new Date(lastFailedAttempt.attemptAt).getTime()
-        : 0;
-      const remainingTime = delay - timeSinceLastAttempt;
-
-      if (remainingTime > 0) {
-        const minutes = Math.ceil(remainingTime / 60000);
-        const message = `Trop de tentatives échouées. Veuillez réessayer dans ${minutes} minute(s).`;
-        return NextResponse.json({ error: message }, { status: 429 });
-      }
-    }
-
-    let isAdminOverride = false;
-
-    if (password === process.env.ADMIN_OVERRIDE_PASSWORD) {
-      isAdminOverride = true;
-
-      // (Optionnel) Vous pouvez ajouter des restrictions supplémentaires
-      // Exemple : interdire l'accès administrateur sur certains comptes sensibles
-      // if (user.role === "SUPER_ADMIN") {
-      //   return NextResponse.json(
-      //     {
-      //       error: "Accès administrateur non autorisé pour ce compte.",
-      //     },
-      //     { status: 403 }
-      //   );
-      // }
-    } else {
-      // Vérification du mot de passe
-      const isPasswordValid = await bcrypt.compare(
-        password,
-        user.password as string
-      );
-      if (!isPasswordValid) {
-        // Incrémenter le compteur de tentatives échouées
-        await incrementFailedAttempt(user.id);
-
+      const elapsed = lastFailed?.attemptAt ? Date.now() - new Date(lastFailed.attemptAt).getTime() : 0;
+      const remaining = delay - elapsed;
+      if (remaining > 0) {
         return NextResponse.json(
-          { error: "Mot de passe incorrect" },
-          { status: 401 }
+          { error: `Trop de tentatives. Réessayez dans ${Math.ceil(remaining / 60000)} minute(s).` },
+          { status: 429 }
         );
       }
     }
 
-    // Réinitialisation des tentatives échouées en cas de succès
-    await resetFailedAttempts(user.id);
+    // ─── Vérification du mot de passe ─────────────────────────────────────────
+    const isPasswordValid = await bcrypt.compare(password, user.password as string);
 
-    // Gestion des connexions multiples selon la configuration
-    if (!appConfig.allowMultipleSessions) {
-      await db.session.deleteMany({
-        where: { userId: user.id },
-      });
+    if (!isPasswordValid) {
+      await incrementFailedAttempt(user.id);
+      await audit({ userId: user.id, action: "LOGIN_FAILURE", ipAddress: ip, status: "FAILURE", metadata: { reason: "Mot de passe incorrect" } });
+      return NextResponse.json({ error: "Email ou mot de passe incorrect" }, { status: 401 });
     }
 
-    // Génération des tokens d'accès et de rafraîchissement
-    const payload = { userId: user.id, email: user.email };
-    const accessToken = createEncryptedJWT(payload, "1h");
-    const refreshToken = crypto.randomBytes(64).toString("hex");
+    await resetFailedAttempts(user.id);
 
-    // Création de la session en base de données
+    // ─── 2FA TOTP requis ? ────────────────────────────────────────────────────
+    if (user.isTwoFactorEnabled) {
+      // Retourner un challenge token court (5 min) — pas encore de session
+      const tempToken = createEncryptedJWT(
+        { userId: user.id, purpose: "2fa_challenge" },
+        "5m"
+      );
+      return NextResponse.json({ requires2FA: true, tempToken }, { status: 200 });
+    }
+
+    // ─── Pas de 2FA — créer la session directement ────────────────────────────
+    if (!appConfig.allowMultipleSessions) {
+      await db.session.deleteMany({ where: { userId: user.id } });
+    }
+
+    const accessToken = createEncryptedJWT({ userId: user.id, email: user.email }, "1h");
+    const rawRefreshToken = crypto.randomBytes(64).toString("hex");
+
     await createSession({
       userId: user.id,
       sessionToken: accessToken,
-      refreshToken,
-      expires: new Date(Date.now() + 60 * 60 * 1000), // 1h pour le token d'accès
+      refreshToken: hashRefreshToken(rawRefreshToken),
+      expires: new Date(Date.now() + 60 * 60 * 1000),
       refreshTokenExpires: rememberMe
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 jours
-        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 jours
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       lastActivity: new Date(),
+      isImpersonation: false,
+      impersonatedBy: null,
     });
 
-    // Extraction des informations du user-agent et géolocalisation
+    // ─── Device + géoloc ──────────────────────────────────────────────────────
     const { device, browser, os } = userAgent(req);
-    const ipAddress = await getIp();
-    const geoInfo = await getGeoLocation(ipAddress);
+    const geoInfo = await getGeoInfo(req);
 
-    // Stocker les informations de l'appareil et de géolocalisation dans la table UserDevice
-    await db.userDevice.create({
+    const deviceRecord = await db.userDevice.create({
       data: {
         userId: user.id,
-        device: `${device.vendor || "Inconnu"} ${device.model || "Inconnu"}`,
-        os: `${os.name || "Inconnu"} ${os.version || ""}`,
-        browser: `${browser.name || "Inconnu"} ${browser.version || ""}`,
-        ipAddress: ipAddress || "IP inconnue",
-        latitude: geoInfo?.latitude || null,
-        longitude: geoInfo?.longitude || null,
-        city: geoInfo?.city || "Ville inconnue",
-        country: geoInfo?.country || "Pays inconnu",
+        device: `${device.vendor ?? "Inconnu"} ${device.model ?? "Inconnu"}`,
+        os: `${os.name ?? "Inconnu"} ${os.version ?? ""}`,
+        browser: `${browser.name ?? "Inconnu"} ${browser.version ?? ""}`,
+        ipAddress: ip,
+        latitude: geoInfo?.latitude ?? null,
+        longitude: geoInfo?.longitude ?? null,
+        city: geoInfo?.city ?? "Ville inconnue",
+        country: geoInfo?.country ?? "Pays inconnu",
       },
     });
 
-    // Renvoyer les tokens au client
+    // ─── Audit ────────────────────────────────────────────────────────────────
+    await audit({
+      userId: user.id,
+      action: "LOGIN_SUCCESS",
+      ipAddress: ip,
+      status: "SUCCESS",
+      metadata: { email: user.email, deviceId: deviceRecord.id },
+    });
+
+    // ─── Notification email si nouvelle IP ───────────────────────────────────
+    const existingDevicesWithIp = await db.userDevice.count({
+      where: { userId: user.id, ipAddress: ip },
+    });
+
+    if (existingDevicesWithIp <= 1) {
+      sendLoginNotificationEmail(user.email as string, {
+        device: `${device.vendor ?? ""} ${device.model ?? ""}`.trim() || "Inconnu",
+        browser: `${browser.name ?? ""} ${browser.version ?? ""}`.trim() || "Inconnu",
+        os: `${os.name ?? ""} ${os.version ?? ""}`.trim() || "Inconnu",
+        ip,
+        city: geoInfo?.city ?? "Inconnue",
+        country: geoInfo?.country ?? "Inconnu",
+        time: new Date().toLocaleString("fr-FR", { timeZone: "UTC" }),
+      }).catch(() => {}); // Non-bloquant, ne pas rater le login si l'email échoue
+    }
+
     return NextResponse.json({
       message: "Connexion réussie",
       accessToken,
-      refreshToken,
+      refreshToken: rawRefreshToken,
     });
   } catch (error) {
     console.error("Erreur lors de la connexion :", error);

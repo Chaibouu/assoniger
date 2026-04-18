@@ -8,28 +8,26 @@ type SessionContextType = {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isImpersonation: boolean;
   refreshUser: () => Promise<void>;
 };
 
-// Créer le contexte
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export const SessionProvider = ({
   user,
+  isImpersonation = false,
   children,
 }: {
   user: User | null;
+  isImpersonation?: boolean;
   children: ReactNode;
 }) => {
   const isAuthenticated = useMemo(() => !!user, [user]);
 
   const refreshUser = useCallback(async () => {
-    // Cette fonction peut être utilisée pour rafraîchir les données utilisateur
-    // Par exemple, après une mise à jour de profil
     try {
-      // Ici vous pouvez appeler une API pour rafraîchir les données
-      // const updatedUser = await fetchUserData();
-      // setUser(updatedUser);
+      // Implémentation possible : appel API pour rafraîchir les données utilisateur
     } catch (error) {
       console.error("Erreur lors du rafraîchissement de l'utilisateur:", error);
     }
@@ -39,10 +37,11 @@ export const SessionProvider = ({
     () => ({
       user,
       isAuthenticated,
-      isLoading: false, // Vous pouvez ajouter un état de chargement si nécessaire
+      isLoading: false,
+      isImpersonation,
       refreshUser,
     }),
-    [user, isAuthenticated, refreshUser]
+    [user, isAuthenticated, isImpersonation, refreshUser]
   );
 
   return (
@@ -52,7 +51,6 @@ export const SessionProvider = ({
   );
 };
 
-// Hook pour utiliser le contexte
 export const useSession = () => {
   const context = useContext(SessionContext);
   if (!context) {
@@ -61,7 +59,6 @@ export const useSession = () => {
   return context;
 };
 
-// Hook pour vérifier si l'utilisateur est authentifié
 export const useAuth = () => {
   const { isAuthenticated, user } = useSession();
   return { isAuthenticated, user };

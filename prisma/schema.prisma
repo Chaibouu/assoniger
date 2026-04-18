@@ -23,16 +23,18 @@ model User {
     password              String?
     role                  UserRole               @default(USER)
     isActive              Boolean                @default(true)
-    deactivatedAt         DateTime? // Date de désactivation
+    deactivatedAt         DateTime?
     isTwoFactorEnabled    Boolean                @default(false)
+    twoFactorSecret       String?                // Secret TOTP (base32) pour l'authentification TOTP
     isDeleted             Boolean                @default(false)
     twoFactorConfirmation TwoFactorConfirmation?
     accounts              Account[]
     sessions              Session[]
     userDevices           UserDevice[]
     FailedLoginAttempt    FailedLoginAttempt[]
-    blogs                 Blog[] // Blogs créés par l'utilisateur
-    blogPosts             BlogPost[] // Posts créés par l'utilisateur
+    auditLogs             AuditLog[]
+    blogs                 Blog[]
+    blogPosts             BlogPost[]
 }
 
 model Account {
@@ -58,10 +60,14 @@ model Session {
     id                  String   @id @default(cuid())
     userId              String
     sessionToken        String   @unique
-    refreshToken        String   @unique // Token de rafraîchissement haché
-    expires             DateTime // Date d'expiration du token
+    refreshToken        String   @unique // Token de rafraîchissement haché (SHA-256)
+    expires             DateTime // Date d'expiration du token d'accès
     refreshTokenExpires DateTime // Expiration du token de rafraîchissement
     lastActivity        DateTime // Date de la dernière activité utilisateur
+
+    // Impersonation admin
+    isImpersonation Boolean @default(false) // True si cette session est une impersonation
+    impersonatedBy  String? // ID de l'admin qui a initié l'impersonation
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -140,23 +146,32 @@ model Job {
 
 model Setting {
     id             String   @id @default(cuid())
-    key            String   @unique // Nom du paramètre
-    value          String // Valeur du paramètre
-    description    String? // Description ou information supplémentaire sur le paramètre
-    isCustomizable Boolean  @default(true) // Indique si l'admin peut modifier ce paramètre
+    key            String   @unique
+    value          String
+    description    String?
+    isCustomizable Boolean  @default(true)
     createdAt      DateTime @default(now())
     updatedAt      DateTime @updatedAt
 
-    @@map("settings") // Nom de la table dans la base de données
+    @@map("settings")
 }
 
-model AdminOverrideLog {
-    id         String   @id @default(cuid())
-    adminId    String? // ID de l'administrateur (si applicable)
-    targetUser String // L'utilisateur accédé
-    ipAddress  String? // Adresse IP
-    createdAt  DateTime @default(now())
+model AuditLog {
+    id        String   @id @default(cuid())
+    userId    String?
+    user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+    action    String   // "LOGIN_SUCCESS" | "LOGIN_FAILURE" | "LOGOUT" | "2FA_ENABLED" | etc.
+    ipAddress String?
+    userAgent String?
+    status    String   // "SUCCESS" | "FAILURE"
+    metadata  Json?    // Données contextuelles (email, raison, device…)
+    createdAt DateTime @default(now())
+
+    @@index([userId])
+    @@index([action])
+    @@index([createdAt])
 }
+
 
 // Modèles pour la gestion des blogs
 model Blog {

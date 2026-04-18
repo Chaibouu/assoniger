@@ -1,31 +1,29 @@
 import { NextResponse } from "next/server";
-import { getUserIdFromToken } from "@/lib/tokens";
+import { getFullTokenPayload } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { headers } from "next/headers";
 
-// Forcer le rendu dynamique
 export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
-    // Récupérer le token d'accès depuis les cookies ou l'en-tête Authorization
     const headersList = await headers();
     const token = headersList.get("Authorization")?.split(" ")[1];
+
     if (!token) {
       return NextResponse.json({ error: "Token manquant" }, { status: 401 });
     }
 
-    // Vérifier et récupérer l'ID utilisateur depuis le token
-    const userId = await getUserIdFromToken(token);
+    const payload = getFullTokenPayload(token);
 
-    if (!userId) {
+    if (!payload?.userId) {
       return NextResponse.json(
         { error: "Token invalide ou expiré" },
         { status: 403 }
       );
     }
 
-    // Récupérer l'utilisateur à partir de l'ID
-    const user = await getUserById(userId);
+    const user = await getUserById(payload.userId);
 
     if (!user) {
       return NextResponse.json(
@@ -34,13 +32,16 @@ export async function GET() {
       );
     }
 
-    // Retourner les informations de l'utilisateur
-    return NextResponse.json({ user });
+    // Inclure les métadonnées d'impersonation si présentes dans le token
+    return NextResponse.json({
+      user,
+      ...(payload.isImpersonation && {
+        isImpersonation: true,
+        impersonatedBy: payload.impersonatedBy,
+      }),
+    });
   } catch (error) {
-    console.error(
-      "Erreur lors de la récupération du profil utilisateur:",
-      error
-    );
+    console.error("Erreur lors de la récupération du profil :", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }

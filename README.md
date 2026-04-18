@@ -1,86 +1,187 @@
-# 🚀 Sahel Coders - Website Starter (Next.js 15)
+# Sahel Coders - Website Starter (Next.js 15)
 
-Un starter moderne et performant pour applications web avec Next.js 15, React 19, et une authentification complète.
+Un starter de production moderne pour applications web avec Next.js 15, React 19, et une stack de sécurité complète.
 
-## ✨ Nouvelles fonctionnalités (Next.js 15)
+## Technologies
 
-### 🎯 **Améliorations principales**
-- **Next.js 15** avec React 19
-- **Server Actions optimisées** avec cache() et meilleures performances
-- **Métadonnées avancées** avec SEO optimisé
-- **Error Boundaries** pour une meilleure gestion des erreurs
-- **Middleware amélioré** avec gestion d'erreurs robuste
-- **Context API optimisé** avec React 19
-- **Hooks personnalisés** pour les Server Actions
-- **Configuration de sécurité** renforcée
-
-### 🔧 **Améliorations techniques**
-- **Performance optimisée** avec tree-shaking amélioré
-- **Images optimisées** avec formats WebP et AVIF
-- **Compression automatique** des assets
-- **En-têtes de sécurité** configurés
-- **Code splitting** intelligent
-- **Hot reload** plus rapide
-
-### 🆕 **Nouvelles fonctionnalités ajoutées**
-- ✅ **Système de logging structuré** (`lib/logger.ts`)
-- ✅ **Health check endpoint** (`/api/health`)
-- ✅ **Gestion centralisée des erreurs** (`lib/errors.ts`)
-- ✅ **Système d'upload de fichiers** (`lib/upload.ts`)
-- ✅ **Configuration de tests** (Jest + React Testing Library)
-- ✅ **Dockerfile** pour le déploiement
-- ✅ **CI/CD avec GitHub Actions**
-- ✅ **Documentation complète** (CONTRIBUTING.md, IMPROVEMENTS.md)
-
-> 📖 Voir [IMPROVEMENTS.md](./IMPROVEMENTS.md) pour plus de détails sur les améliorations
-
-## 🛠️ Technologies utilisées
-
-- **Framework**: Next.js 15.3.4
-- **Runtime**: React 19.1.0
+- **Framework**: Next.js 15 (App Router)
+- **Runtime**: React 19.2
 - **Base de données**: Prisma + MongoDB
-- **Authentification**: JWT avec refresh tokens
-- **Styling**: Tailwind CSS + Radix UI
+- **Authentification**: JWT RS256 + AES-256-GCM + Refresh tokens
+- **Styling**: Tailwind CSS + Radix UI (shadcn/ui)
 - **Validation**: Zod
-- **Notifications**: Sonner
+- **Logging**: Pino (JSON structuré)
+- **Cache / Rate limiting**: Redis (ioredis)
+- **2FA**: TOTP (otplib + Google Authenticator)
 - **Formulaires**: React Hook Form
+- **Notifications**: Sonner
 - **Icons**: Lucide React + Tabler Icons
 
-## 🚀 Démarrage rapide
+## Authentification
+
+### Flux de connexion
+1. `POST /api/auth/login` — vérification email/mot de passe
+   - Si 2FA activé → retourne `{ requires2FA: true, tempToken }` (challenge 5 min)
+2. `POST /api/auth/2fa/login` — vérification TOTP → session complète
+3. Tokens retournés : `accessToken` (JWT 1h) + `refreshToken` (7j / 30j avec rememberMe)
+
+### Fonctionnalités
+- Inscription avec vérification email obligatoire
+- Double authentification TOTP (Google Authenticator, Authy, Bitwarden…)
+- Refresh tokens (SHA-256 hashé en base, jamais stocké en clair)
+- Sessions multiples configurables (`allowMultipleSessions` dans `settings/`)
+- Réinitialisation et changement de mot de passe
+- Changement d'email avec confirmation
+- Backoff progressif sur les tentatives de connexion échouées
+- Notification email sur nouvelle IP/appareil
+
+## Sécurité
+
+### Tokens
+- JWT signés **RS256** (clé privée RSA) puis chiffrés **AES-256-GCM**
+- Refresh tokens haute entropie (64 octets aléatoires), stockés hashés (SHA-256)
+- `tempToken` 2FA limité à 5 minutes avec `purpose: "2fa_challenge"` dans le payload
+
+### Rate limiting (deux couches)
+| Couche | Scope | Limite |
+|--------|-------|--------|
+| In-memory (middleware/Edge) | Global par IP | 20 req / 60s |
+| Redis sliding window (API routes) | Auth par IP | 10 tentatives / 15 min |
+| Redis sliding window (API routes) | Signup/Email par IP | 5 req / 1h |
+
+### Content Security Policy
+- Nonce par requête généré dans le middleware (Edge Runtime)
+- `'strict-dynamic'` + `'nonce-{nonce}'` — aucun inline script autorisé sans nonce
+- En-têtes supplémentaires : `X-Frame-Options`, `X-Content-Type-Options`, `HSTS`, `Permissions-Policy`
+
+### Détection de mots de passe compromis (HIBP)
+- K-anonymity : seuls les 5 premiers caractères du hash SHA-1 sont envoyés
+- L'API HIBP ne reçoit jamais le mot de passe complet
+- Header `Add-Padding: true` pour masquer la taille de la réponse
+- Fail-open : une erreur réseau ne bloque pas l'inscription
+
+### Uploads
+- Validation du magic number binaire (JPEG, PNG, GIF, WebP, PDF)
+- Extension sanitisée, nom de fichier remplacé par un UUID aléatoire
+- Vérification du type MIME déclaré vs signature réelle
+
+### Audit log
+Chaque action sensible est tracée dans `AuditLog` (Prisma) :
+`LOGIN_SUCCESS`, `LOGIN_FAILURE`, `LOGOUT`, `SIGNUP`, `2FA_ENABLED`, `2FA_DISABLED`, `2FA_FAILURE`, `2FA_SUCCESS`, `PASSWORD_RESET`, `PASSWORD_CHANGED`, `IMPERSONATION_START`, `IMPERSONATION_END`, `EMAIL_CHANGED`, `ACCOUNT_DISABLED`, `ACCOUNT_DELETED`
+
+## Impersonation admin
+
+Permet à un ADMIN d'auditer un compte utilisateur sans connaître son mot de passe.
+
+```
+POST /api/admin/impersonate   { targetUserId }   Authorization: Bearer <adminToken>
+DELETE /api/admin/impersonate/end                Authorization: Bearer <impersonationToken>
+```
+
+- La session admin n'est jamais touchée — un cookie `impersonationToken` séparé (httpOnly) est créé
+- Session d'impersonation limitée à **15 minutes**, non renouvelable
+- Impossible d'impersonner un autre ADMIN
+- Bannière orange affichée dans l'UI tant que la session d'impersonation est active
+- Server Actions : `startImpersonation(targetUserId)` / `endImpersonation()` (cookies gérés côté serveur uniquement)
+
+## Logging structuré (Pino)
+
+```ts
+import { logger } from "@/lib/logger";
+
+logger.logAuth("LOGIN_SUCCESS", userId, email);
+logger.logRequest("GET", "/api/health", 200, 12);
+logger.logDatabase("query", "user.findUnique", 8);
+logger.logSecurity("RATE_LIMIT", ip, "Trop de tentatives");
+```
+
+- Pino-pretty en développement, JSON brut en production
+- Niveau contrôlé par `LOG_LEVEL` (env)
+
+## Health check
+
+```
+GET /api/health
+```
+
+Retourne `200 { status: "ok" }` si DB + Redis répondent, `503 { status: "degraded" }` sinon. Utile pour les probes Kubernetes / load balancers.
+
+## Structure du projet
+
+```
+website-starter/
+├── app/
+│   ├── (dashboard)/
+│   │   ├── admin/
+│   │   │   └── users/          # Interface d'impersonation
+│   │   └── …
+│   ├── api/
+│   │   ├── admin/impersonate/  # POST + DELETE /end
+│   │   ├── auth/
+│   │   │   ├── login/
+│   │   │   ├── signup/
+│   │   │   ├── 2fa/
+│   │   │   │   ├── setup/      # GET — génère QR code TOTP
+│   │   │   │   ├── verify-setup/ # POST — confirme enrollment
+│   │   │   │   └── login/      # POST — étape 2 connexion
+│   │   │   ├── refresh/
+│   │   │   ├── logout/
+│   │   │   ├── forgot-password/
+│   │   │   ├── reset-password/
+│   │   │   ├── change-password/
+│   │   │   ├── change-email/
+│   │   │   └── verify/
+│   │   ├── health/             # GET — healthcheck DB + Redis
+│   │   ├── profile/
+│   │   └── upload/
+│   └── layout.tsx              # Lit x-nonce pour CSP
+├── actions/
+│   ├── impersonate.ts          # Server Actions (cookies httpOnly)
+│   └── getUser.ts              # Vérifie impersonationToken en priorité
+├── components/
+│   ├── ImpersonationBanner.tsx # Bannière admin session
+│   ├── admin/ImpersonateButton.tsx
+│   └── …
+├── lib/
+│   ├── tokens.ts               # JWT RS256 + AES-256-GCM
+│   ├── rateLimit.ts            # In-memory + Redis sliding window
+│   ├── redis.ts                # Singleton ioredis
+│   ├── audit.ts                # AuditLog helper
+│   ├── hibp.ts                 # HIBP k-anonymity
+│   ├── logger.ts               # Pino wrapper
+│   ├── mail.ts                 # Nodemailer (login notif, vérif, reset)
+│   ├── upload.ts               # Magic number + UUID filename
+│   └── geo.ts                  # IP → géolocalisation
+├── context/SessionContext.tsx
+├── middleware.ts               # CSP nonce + rate limiting Edge
+├── settings/index.ts           # Config centralisée
+└── prisma/schema.prisma
+```
+
+## Installation
 
 ### Prérequis
-- Node.js 18+ 
-- npm 9+ ou yarn
-- MongoDB (local ou cloud)
+- Node.js 18+
+- MongoDB (local ou Atlas)
+- Redis (local ou Redis Cloud)
 
-### Installation
+### Démarrage
 
 ```bash
-# Cloner le repository
 git clone <repository-url>
 cd website-starter
 
-# Installer les dépendances
 npm install
-# ou
-yarn install
 
-# Configurer les variables d'environnement
 cp .env.example .env.local
+# Remplir les variables (voir section ci-dessous)
 
-# Générer le client Prisma
-npm run postinstall
-
-# Pousser le schéma vers la base de données
-npm run db:push
-
-# Lancer le serveur de développement
+npm run postinstall        # Génère le client Prisma
+npm run db:push            # Synchronise le schéma
 npm run dev
 ```
 
 ### Variables d'environnement
-
-Créez un fichier `.env.local` avec les variables suivantes :
 
 ```env
 # Base de données
@@ -89,171 +190,94 @@ DATABASE_URL="mongodb://localhost:27017/sahel-coders"
 # Application
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
-# JWT
-JWT_SECRET="your-jwt-secret"
-JWT_REFRESH_SECRET="your-refresh-secret"
+# JWT (RS256) — générer avec openssl
+RSA_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n…"
+RSA_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n…"
+
+# AES-256-GCM — 32 octets aléatoires en base64
+AES_SECRET_KEY="base64-encoded-32-bytes"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
 
 # Email (Nodemailer)
 MAIL_AUTH_USER="your-email@gmail.com"
 MAIL_AUTH_PASS="your-app-password"
+MAIL_HOST="smtp.gmail.com"
+MAIL_PORT="587"
 
-# RSA Keys (pour les tokens de vérification)
-RSA_PRIVATE_KEY="your-private-key"
-RSA_PUBLIC_KEY="your-public-key"
-
-# Admin override (optionnel)
-ADMIN_OVERRIDE_PASSWORD="admin-override-password"
+# Optionnel
+LOG_LEVEL="debug"          # trace | debug | info | warn | error
 ```
 
-## 📁 Structure du projet
-
-```
-website-starter/
-├── app/                    # App Router (Next.js 15)
-│   ├── (dashboard)/       # Routes protégées
-│   ├── api/              # API Routes
-│   ├── auth/             # Pages d'authentification
-│   └── layout.tsx        # Layout racine
-├── actions/              # Server Actions
-├── components/           # Composants React
-│   ├── auth/            # Composants d'authentification
-│   ├── ui/              # Composants UI (shadcn/ui)
-│   └── common/          # Composants communs
-├── context/             # Context API
-├── hooks/               # Hooks personnalisés
-├── lib/                 # Utilitaires et configurations
-├── data/                # Couche d'accès aux données
-├── schemas/             # Schémas de validation Zod
-├── types/               # Types TypeScript
-└── prisma/              # Schéma et migrations Prisma
-```
-
-## 🔐 Système d'authentification
-
-### Fonctionnalités
-- ✅ Inscription avec vérification email
-- ✅ Connexion sécurisée
-- ✅ Refresh tokens automatiques
-- ✅ Gestion des rôles (USER, ADMIN)
-- ✅ Protection des routes
-- ✅ Rate limiting
-- ✅ Réinitialisation de mot de passe
-- ✅ Changement d'email
-- ✅ Sessions multiples (configurable)
-
-### Sécurité
-- 🔒 JWT chiffrés avec JWE
-- 🔒 Tokens de vérification signés RSA
-- 🔒 Rate limiting sur les routes d'auth
-- 🔒 Protection CSRF
-- 🔒 En-têtes de sécurité
-- 🔒 Validation des données avec Zod
-
-## 🎨 Interface utilisateur
-
-### Design System
-- **shadcn/ui** pour les composants de base
-- **Tailwind CSS** pour le styling
-- **Radix UI** pour l'accessibilité
-- **Framer Motion** pour les animations
-- **Thème sombre/clair** avec next-themes
-
-### Composants disponibles
-- 🎯 Formulaires d'authentification
-- 🎯 Navigation et sidebar
-- 🎯 Tableaux de données
-- 🎯 Modales et dialogues
-- 🎯 Notifications toast
-- 🎯 Loaders et spinners
-
-## 📊 Scripts disponibles
+#### Génération des clés RSA
 
 ```bash
-# Développement
-npm run dev              # Serveur de développement
-npm run build            # Build de production
-npm run start            # Serveur de production
-
-# Qualité du code
-npm run lint             # Vérification ESLint
-npm run lint:fix         # Correction automatique
-npm run type-check       # Vérification TypeScript
-npm run format           # Formatage avec Prettier
-npm run format:check     # Vérification du formatage
-
-# Tests
-npm test                 # Lancer les tests
-npm run test:watch       # Tests en mode watch
-npm run test:coverage    # Tests avec couverture
-
-# Base de données
-npm run db:push          # Pousser le schéma
-npm run db:migrate       # Créer une migration
-npm run db:studio        # Interface Prisma Studio
-npm run seed             # Peupler la base de données
+openssl genrsa -out private.pem 2048
+openssl rsa -in private.pem -pubout -out public.pem
 ```
 
-## 🔧 Configuration avancée
+#### Génération de la clé AES
 
-### Optimisations Next.js 15
-- **Tree-shaking** optimisé
-- **Code splitting** intelligent
-- **Images optimisées** automatiquement
-- **Compression** des assets
-- **Cache** des Server Actions
-
-### Performance
-- **Lazy loading** des composants
-- **Suspense** pour le chargement
-- **Error Boundaries** pour la robustesse
-- **Optimisation des bundles**
-
-## 🚀 Déploiement
-
-### Vercel (Recommandé)
 ```bash
-# Installer Vercel CLI
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+## Scripts
+
+```bash
+npm run dev              # Développement
+npm run build            # Build production
+npm run start            # Serveur production
+npm run lint             # ESLint
+npm run type-check       # TypeScript
+npm run db:push          # Sync schéma Prisma
+npm run db:migrate       # Migration Prisma
+npm run db:studio        # Prisma Studio
+npm run seed             # Seed base de données
+npm test                 # Tests Jest
+npm run test:coverage    # Couverture
+```
+
+## Déploiement
+
+### VPS (Nginx + PM2 + Redis)
+
+Voir la configuration VPS dans la documentation interne (Nginx, Redis, PM2, BullBoard).
+
+### Vercel
+
+```bash
 npm i -g vercel
-
-# Déployer
 vercel
 ```
 
-### Docker
-```bash
-# Build de l'image
-docker build -t website-starter .
+Ajouter toutes les variables d'environnement dans le dashboard Vercel. Redis : utiliser Redis Cloud ou Upstash.
 
-# Lancer le conteneur
+### Docker
+
+```bash
+docker build -t website-starter .
 docker run -p 3000:3000 \
-  -e DATABASE_URL="your-database-url" \
-  -e JWT_SECRET="your-jwt-secret" \
+  -e DATABASE_URL="…" \
+  -e RSA_PRIVATE_KEY="…" \
+  -e AES_SECRET_KEY="…" \
+  -e REDIS_URL="…" \
   website-starter
 ```
 
-### Autres plateformes
-- **Netlify**: Compatible avec les builds statiques
-- **Railway**: Support complet de Next.js
-- **Docker**: Dockerfile inclus (voir ci-dessus)
-
-## 🤝 Contribution
+## Contribution
 
 1. Fork le projet
-2. Créer une branche feature (`git checkout -b feature/AmazingFeature`)
-3. Commit les changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
+2. Créer une branche (`git checkout -b feature/ma-feature`)
+3. Commit (`git commit -m 'feat: description'`)
+4. Push (`git push origin feature/ma-feature`)
 5. Ouvrir une Pull Request
 
-## 📝 Licence
+## Licence
 
-Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
-
-## 🆘 Support
-
-- 📧 Email: support@sahelcoders.com
-- 💬 Discord: [Sahel Coders Community](https://discord.gg/sahelcoders)
-- 📖 Documentation: [docs.sahelcoders.com](https://docs.sahelcoders.com)
+MIT — voir `LICENSE`.
 
 ---
 
-**Développé avec ❤️ par l'équipe Sahel Coders**
+Développé par l'équipe Sahel Coders

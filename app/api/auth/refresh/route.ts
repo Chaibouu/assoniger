@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { createEncryptedJWT } from "@/lib/tokens";
+
+/**
+ * Hache le refresh token avec SHA-256 pour retrouver son équivalent en base.
+ * Doit être identique à la fonction utilisée lors de la création de session (login).
+ */
+function hashRefreshToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 export async function POST(req: Request) {
   try {
@@ -13,9 +22,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Rechercher le token de rafraîchissement dans la base de données
+    // ✅ On cherche le HASH du token en base — pas le token brut
+    const hashedToken = hashRefreshToken(refreshToken);
+
     const session = await db.session.findUnique({
-      where: { refreshToken },
+      where: { refreshToken: hashedToken },
     });
 
     if (!session || new Date() > session.refreshTokenExpires) {
@@ -25,27 +36,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // Générer un nouveau token d'accès chiffré avec JWE
-    const payload = { userId: session.userId }; // Charger les informations utilisateur
-    const newAccessToken = createEncryptedJWT(payload, "8h"); // Expiration 1h
+    // Générer un nouveau token d'accès
+    const payload = { userId: session.userId };
+    const newAccessToken = createEncryptedJWT(payload, "1h"); // 1h cohérent avec le login
 
-    // Calculer l'heure d'expiration du token d'accès
-    const accessTokenExpiresAt = 60 * 60 * 8; // Expire dans 8 heure
+    const accessTokenExpiresAt = 60 * 60; // en secondes
 
-    // Mettre à jour la session avec le nouveau token d'accès et l'heure d'expiration
     await db.session.update({
       where: { id: session.id },
       data: {
-        sessionToken: newAccessToken, // Stocker le nouveau token d'accès chiffré
+        sessionToken: newAccessToken,
         expires: new Date(Date.now() + accessTokenExpiresAt * 1000),
+        lastActivity: new Date(),
       },
     });
 
-    // Renvoie du nouveau token d'accès au client
     return NextResponse.json({
       accessToken: newAccessToken,
       accessTokenExpiresAt,
     });
+
   } catch (error) {
     console.error("Erreur lors du rafraîchissement des tokens :", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

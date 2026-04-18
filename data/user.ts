@@ -20,6 +20,28 @@ export const getUserByEmail = async (email: string) => {
 //   }
 // };
 
+export async function getAllUsers() {
+  try {
+    return await db.user.findMany({
+      where: { isDeleted: false },
+      select: {
+        id: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        image: true,
+      },
+      orderBy: { role: "asc" },
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function getUserById(userId: string) {
   try {
     // Récupérer les informations de l'utilisateur depuis la base de données
