@@ -8,3 +8,9 @@ export type User = {
   isActive: boolean;
   image?: string;
 };
+
+/** Métadonnées d'une session d'impersonation admin */
+export type ImpersonationMeta = {
+  isImpersonation: true;
+  impersonatedBy: string; // adminId
+};

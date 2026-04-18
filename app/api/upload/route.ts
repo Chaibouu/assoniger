@@ -38,11 +38,7 @@ export async function POST(req: NextRequest) {
     // Uploader le fichier
     const result = await uploadFromFormData(formData, "file", uploadOptions);
 
-    logger.info("File uploaded successfully", {
-      filename: result.filename,
-      size: result.size,
-      mimetype: result.mimetype,
-    });
+    logger.info({ filename: result.filename, size: result.size, mimetype: result.mimetype }, "File uploaded successfully");
 
     return NextResponse.json({
       success: true,
@@ -54,7 +50,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    logger.error("File upload failed", error as Error);
+    logger.error({ err: error }, "File upload failed");
     return handleApiError(error);
   }
 }

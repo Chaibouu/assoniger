@@ -71,7 +71,7 @@ export async function makeAuthenticatedRequest(
         await refreshUserToken(refreshToken);
 
       // Mettre à jour l'accessToken dans les cookies
-     cookieStore.set("accessToken", newAccessToken, {
+      cookieStore.set("accessToken", newAccessToken, {
         httpOnly: true,
         secure: true,
         maxAge: accessTokenExpiresAt, // Définir l'expiration du token d'accès

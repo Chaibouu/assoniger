@@ -49,8 +49,8 @@ export async function getGeoInfo(req: NextRequest): Promise<GeoInfo> {
       };
     }
 
-    // Utiliser une API gratuite pour la géolocalisation
-    const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,lat,lon,timezone`);
+    // Utiliser une API gratuite pour la géolocalisation (HTTPS obligatoire)
+    const response = await fetch(`https://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,lat,lon,timezone`);
     const data = await response.json();
 
     if (data.status === "success") {

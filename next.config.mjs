@@ -40,18 +40,38 @@ const nextConfig = {
             {
                 source: '/(.*)',
                 headers: [
+                    // Empêche le clickjacking
                     {
                         key: 'X-Frame-Options',
                         value: 'DENY',
                     },
+                    // Empêche le MIME sniffing
                     {
                         key: 'X-Content-Type-Options',
                         value: 'nosniff',
                     },
+                    // Contrôle les infos transmises dans le Referer
                     {
                         key: 'Referrer-Policy',
-                        value: 'origin-when-cross-origin',
+                        value: 'strict-origin-when-cross-origin',
                     },
+                    // Force HTTPS pour 2 ans, incluant sous-domaines (activer en production)
+                    {
+                        key: 'Strict-Transport-Security',
+                        value: 'max-age=63072000; includeSubDomains; preload',
+                    },
+                    // Protection XSS legacy (IE/Edge anciens)
+                    {
+                        key: 'X-XSS-Protection',
+                        value: '1; mode=block',
+                    },
+                    // Restreint l'accès aux APIs sensibles du navigateur
+                    {
+                        key: 'Permissions-Policy',
+                        value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+                    },
+                    // Content-Security-Policy définie dynamiquement dans middleware.ts
+                    // (avec nonce par requête pour supprimer unsafe-inline des scripts)
                 ],
             },
         ];

@@ -1,129 +1,79 @@
 /**
- * Système de logging structuré pour l'application
- * Supporte différents niveaux de log et formats
+ * Logger structuré — Pino
+ *
+ * Dev  : sortie colorée lisible (pino-pretty)
+ * Prod : JSON brut → compatible Datadog, Grafana Loki, CloudWatch…
+ *
+ * Usage :
+ *   import { logger } from '@/lib/logger';
+ *   logger.info({ userId, action: 'LOGIN' }, 'Connexion réussie');
+ *   logger.error({ err }, 'Erreur serveur');
+ *   logger.logAuth('LOGIN_SUCCESS', userId, email);
  */
 
-type LogLevel = "error" | "warn" | "info" | "debug";
+import pino, { Logger as PinoLogger } from "pino";
 
-interface LogEntry {
-  level: LogLevel;
-  message: string;
-  timestamp: string;
-  context?: Record<string, unknown>;
-  error?: Error;
-}
+const isDev = process.env.NODE_ENV !== "production";
 
-class Logger {
-  private isDevelopment = process.env.NODE_ENV === "development";
-  private isProduction = process.env.NODE_ENV === "production";
+const base = pino({
+  level: process.env.LOG_LEVEL ?? (isDev ? "debug" : "info"),
+  base: { app: "website-starter", env: process.env.NODE_ENV ?? "development" },
+  timestamp: pino.stdTimeFunctions.isoTime,
 
-  private formatMessage(entry: LogEntry): string {
-    const { level, message, timestamp, context, error } = entry;
+  ...(isDev && {
+    transport: {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+        translateTime: "SYS:standard",
+        ignore: "pid,hostname,app,env",
+      },
+    },
+  }),
+}) as PinoLogger;
 
-    let formatted = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+// ─── Wrapper avec méthodes métier ─────────────────────────────────────────────
 
-    if (context && Object.keys(context).length > 0) {
-      formatted += ` | Context: ${JSON.stringify(context)}`;
-    }
+class AppLogger {
+  // Accès direct aux niveaux Pino
+  readonly trace = base.trace.bind(base);
+  readonly debug = base.debug.bind(base);
+  readonly info  = base.info.bind(base);
+  readonly warn  = base.warn.bind(base);
+  readonly error = base.error.bind(base);
+  readonly fatal = base.fatal.bind(base);
 
-    if (error) {
-      formatted += ` | Error: ${error.message}`;
-      if (this.isDevelopment && error.stack) {
-        formatted += `\n${error.stack}`;
-      }
-    }
-
-    return formatted;
+  /** Log d'une requête HTTP */
+  logRequest(method: string, path: string, statusCode: number, durationMs: number) {
+    base.info({ method, path, statusCode, durationMs }, "HTTP Request");
   }
 
-  private log(
-    level: LogLevel,
-    message: string,
-    context?: Record<string, unknown>,
-    error?: Error
-  ) {
-    const entry: LogEntry = {
-      level,
-      message,
-      timestamp: new Date().toISOString(),
-      context,
-      error,
-    };
-
-    const formatted = this.formatMessage(entry);
-
-    // En production, on peut envoyer les erreurs à un service externe
-    if (this.isProduction && level === "error") {
-      // TODO: Intégrer avec Sentry, LogRocket, etc.
-      console.error(formatted);
-    } else {
-      switch (level) {
-        case "error":
-          console.error(formatted);
-          break;
-        case "warn":
-          console.warn(formatted);
-          break;
-        case "info":
-          console.info(formatted);
-          break;
-        case "debug":
-          if (this.isDevelopment) {
-            console.debug(formatted);
-          }
-          break;
-      }
-    }
-  }
-
-  error(message: string, error?: Error, context?: Record<string, unknown>) {
-    this.log("error", message, context, error);
-  }
-
-  warn(message: string, context?: Record<string, unknown>) {
-    this.log("warn", message, context);
-  }
-
-  info(message: string, context?: Record<string, unknown>) {
-    this.log("info", message, context);
-  }
-
-  debug(message: string, context?: Record<string, unknown>) {
-    this.log("debug", message, context);
-  }
-
-  // Méthodes spécialisées pour des cas d'usage courants
-  logRequest(
-    method: string,
-    path: string,
-    statusCode: number,
-    duration: number
-  ) {
-    this.info("HTTP Request", {
-      method,
-      path,
-      statusCode,
-      duration: `${duration}ms`,
-    });
-  }
-
+  /** Log d'une action d'authentification — masque l'email */
   logAuth(action: string, userId?: string, email?: string) {
-    this.info(`Auth: ${action}`, {
-      userId,
-      email: email ? email.replace(/(.{2})(.*)(@.*)/, "$1***$3") : undefined, // Masquer l'email
-    });
+    base.info(
+      {
+        action,
+        userId,
+        // Masque : john***@example.com
+        email: email ? email.replace(/^(.{2})(.*)(@.*)$/, "$1***$3") : undefined,
+      },
+      `Auth: ${action}`
+    );
   }
 
-  logDatabase(operation: string, table: string, duration?: number) {
-    this.debug(`DB: ${operation}`, {
-      table,
-      duration: duration ? `${duration}ms` : undefined,
-    });
+  /** Log d'une opération base de données */
+  logDatabase(operation: string, table: string, durationMs?: number) {
+    base.debug({ operation, table, durationMs }, `DB: ${operation} on ${table}`);
+  }
+
+  /** Log de sécurité — niveau warn par défaut */
+  logSecurity(event: string, context?: Record<string, unknown>) {
+    base.warn({ event, ...context }, `Security: ${event}`);
   }
 }
 
-// Export d'une instance singleton
-export const logger = new Logger();
+export const logger = new AppLogger();
+export default logger;
 
-// Export du type pour utilisation dans d'autres fichiers
-export type { LogLevel, LogEntry };
+// Types utilitaires
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";

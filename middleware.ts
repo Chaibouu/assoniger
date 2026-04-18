@@ -10,56 +10,81 @@ import { getUser } from "./actions/getUser";
 import { applyRateLimit } from "./lib/rateLimit";
 import { isRouteProtected } from "./utils/is-route-protected";
 
+// ─── CSP Nonce ────────────────────────────────────────────────────────────────
+/**
+ * Génère un nonce cryptographiquement aléatoire par requête.
+ * Le nonce est transmis :
+ *   - En header de requête (x-nonce) → lu par RootLayout pour les balises <Script>
+ *   - En header de réponse (Content-Security-Policy) → envoyé au navigateur
+ *
+ * Cela permet de supprimer 'unsafe-inline' de script-src tout en
+ * autorisant les scripts inline de Next.js (qui reçoivent le nonce).
+ */
+function buildCspWithNonce(nonce: string): string {
+  const directives = [
+    "default-src 'self'",
+    // Next.js injecte des scripts inline avec le nonce automatiquement
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'", // unsafe-inline requis pour les styles CSS-in-JS
+    "img-src 'self' data: blob: https://firebasestorage.googleapis.com",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    // En développement, autoriser 'unsafe-eval' pour le HMR Next.js
+    ...(process.env.NODE_ENV === "development" ? ["script-src-elem 'self' 'unsafe-inline'"] : []),
+  ];
+  return directives.join("; ");
+}
+
+// ─── Middleware principal ─────────────────────────────────────────────────────
+
 export async function middleware(req: NextRequest) {
   const { nextUrl } = req;
 
   try {
-    // Vérification des routes
-    const isApiRoute = nextUrl.pathname.startsWith("/api"); // API routes
-    const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix); // Auth API routes
-    const isPublicRoute = publicRoutes.includes(nextUrl.pathname); // Public routes
-    const isAuthRoute = authRoutes.includes(nextUrl.pathname); // Auth-related pages (login, register, etc.)
+    const isApiRoute      = nextUrl.pathname.startsWith("/api");
+    const isApiAuthRoute  = nextUrl.pathname.startsWith(apiAuthPrefix);
+    const isPublicRoute   = publicRoutes.includes(nextUrl.pathname);
+    const isAuthRoute     = authRoutes.includes(nextUrl.pathname);
 
-    // Appliquer un "rate limit" uniquement sur les routes d'authentification
+    // ─── Nonce CSP — généré pour chaque requête HTML ───────────────────────
+    const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+    const csp   = buildCspWithNonce(nonce);
+
+    // ─── Rate limiting (in-memory) sur les routes d'auth ──────────────────
     if (isApiAuthRoute) {
       const rateLimitResponse = await applyRateLimit(req);
-      if (rateLimitResponse) {
-        return rateLimitResponse; // Retourner la réponse si le rate limit est dépassé
-      }
-      return NextResponse.next(); // Continuer l'exécution si le rate limit n'est pas dépassé
-    }
-
-    // **Cas API :** Récupérer les tokens directement depuis l'en-tête d'authentification
-    if (isApiRoute) {
-      const authorizationHeader = req.headers.get("Authorization");
-      const accessToken = authorizationHeader?.split(" ")[1];
-
-      // Si c'est une API d'authentification, pas besoin de vérifier le token
-      if (isApiAuthRoute) {
-        return NextResponse.next();
-      }
-
-      // Si c'est une API protégée, vérifier le token dans l'en-tête
-      if (!isPublicRoute && !accessToken) {
-        return NextResponse.json(
-          { error: "Token d'accès manquant ou non valide" },
-          { status: 401 }
-        );
-      }
-
+      if (rateLimitResponse) return rateLimitResponse;
       return NextResponse.next();
     }
 
-    // **Cas Frontend** : Utiliser les cookies pour récupérer l'accessToken et vérifier l'authentification
+    // ─── Routes API ────────────────────────────────────────────────────────
+    if (isApiRoute) {
+      if (!isPublicRoute) {
+        const authorizationHeader = req.headers.get("Authorization");
+        const accessToken = authorizationHeader?.split(" ")[1];
+        if (!accessToken) {
+          return NextResponse.json(
+            { error: "Token d'accès manquant ou non valide" },
+            { status: 401 }
+          );
+        }
+      }
+      return NextResponse.next();
+    }
 
-    // On récupère les informations de l'utilisateur à partir du token dans le cookie
+    // ─── Routes Frontend ───────────────────────────────────────────────────
+    // Transmettre le nonce en header de requête pour que le RootLayout puisse le lire
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-nonce", nonce);
+
     const result = await getUser();
 
-    // Si un nouveau token est généré après rafraîchissement, mettre à jour le cookie
+    // Rafraîchissement du token d'accès si nécessaire
     if (result?.tokenInfo) {
-      const response = NextResponse.next();
-
-      // Mise à jour de l'accessToken dans le cookie
+      const response = NextResponse.next({ request: { headers: requestHeaders } });
       response.cookies.set({
         name: "accessToken",
         value: result.tokenInfo.accessToken,
@@ -69,56 +94,44 @@ export async function middleware(req: NextRequest) {
         path: "/",
         sameSite: "lax",
       });
-
+      response.headers.set("Content-Security-Policy", csp);
+      response.headers.set("x-nonce", nonce);
       return response;
     }
 
-    // Si l'utilisateur est connecté
-    const isLoggedIn = !!result?.user && !result.error;
-    const userRole = result?.user?.user?.role;
-
-    // **Vérification des rôles pour les routes protégées**
+    const isLoggedIn  = !!result?.user && !result.error;
+    const userRole    = result?.user?.user?.role;
     const protectedRoute = isRouteProtected(userRole, nextUrl.pathname);
 
-    // Si l'utilisateur n'est pas autorisé à accéder à la route
     if (isLoggedIn && protectedRoute) {
       return NextResponse.redirect(new URL("/unauthorized", nextUrl));
     }
 
-    // **Auth Routes** : Rediriger les utilisateurs connectés loin des pages de login, etc.
     if (isAuthRoute && isLoggedIn) {
       return NextResponse.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl));
     }
 
-    // **Protected Routes par défaut** : Si ce n'est pas une route publique ou d'authentification, elle est protégée
     if (!isPublicRoute && !isAuthRoute && !isLoggedIn) {
-      let callbackUrl = nextUrl.pathname;
-      if (nextUrl.search) {
-        callbackUrl += nextUrl.search;
-      }
-      const encodedCallbackUrl = encodeURIComponent(callbackUrl);
-
+      const callbackUrl = nextUrl.search
+        ? `${nextUrl.pathname}${nextUrl.search}`
+        : nextUrl.pathname;
       return NextResponse.redirect(
-        new URL(`/auth/login?callbackUrl=${encodedCallbackUrl}`, nextUrl)
+        new URL(`/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`, nextUrl)
       );
     }
 
-    // **Public Routes** : Accès libre aux routes publiques
-    if (isPublicRoute) {
-      return NextResponse.next();
-    }
+    // Injecter x-nonce dans la requête transmise à l'app
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    response.headers.set("Content-Security-Policy", csp);
+    response.headers.set("x-nonce", nonce);
+    return response;
 
-    // **Toutes les autres routes** : Si aucune autre règle ne s'applique, laisser passer
-    return NextResponse.next();
   } catch (error) {
     console.error("Erreur dans le middleware:", error);
-
-    // En cas d'erreur, rediriger vers la page de login
     return NextResponse.redirect(new URL("/auth/login", nextUrl));
   }
 }
 
-// Configuration pour matcher les routes nécessaires
 export const config = {
   matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
 };
