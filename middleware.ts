@@ -21,19 +21,25 @@ import { isRouteProtected } from "./utils/is-route-protected";
  * autorisant les scripts inline de Next.js (qui reçoivent le nonce).
  */
 function buildCspWithNonce(nonce: string): string {
+  const isDev = process.env.NODE_ENV === "development";
+
+  // En dev, Next.js/Turbopack utilise eval() et des scripts inline pour le HMR.
+  // On doit donc autoriser 'unsafe-eval' et 'unsafe-inline' (sans 'strict-dynamic'
+  // ni nonce qui casseraient le HMR).
+  const scriptSrc = isDev
+    ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:"
+    : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`;
+
   const directives = [
     "default-src 'self'",
-    // Next.js injecte des scripts inline avec le nonce automatiquement
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
-    "style-src 'self' 'unsafe-inline'", // unsafe-inline requis pour les styles CSS-in-JS
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://firebasestorage.googleapis.com",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    isDev ? "connect-src 'self' ws: wss: http: https:" : "connect-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    // En développement, autoriser 'unsafe-eval' pour le HMR Next.js
-    ...(process.env.NODE_ENV === "development" ? ["script-src-elem 'self' 'unsafe-inline'"] : []),
   ];
   return directives.join("; ");
 }
@@ -44,14 +50,14 @@ export async function middleware(req: NextRequest) {
   const { nextUrl } = req;
 
   try {
-    const isApiRoute      = nextUrl.pathname.startsWith("/api");
-    const isApiAuthRoute  = nextUrl.pathname.startsWith(apiAuthPrefix);
-    const isPublicRoute   = publicRoutes.includes(nextUrl.pathname);
-    const isAuthRoute     = authRoutes.includes(nextUrl.pathname);
+    const isApiRoute = nextUrl.pathname.startsWith("/api");
+    const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
+    const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
+    const isAuthRoute = authRoutes.includes(nextUrl.pathname);
 
     // ─── Nonce CSP — généré pour chaque requête HTML ───────────────────────
     const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-    const csp   = buildCspWithNonce(nonce);
+    const csp = buildCspWithNonce(nonce);
 
     // ─── Rate limiting (in-memory) sur les routes d'auth ──────────────────
     if (isApiAuthRoute) {
@@ -84,7 +90,9 @@ export async function middleware(req: NextRequest) {
 
     // Rafraîchissement du token d'accès si nécessaire
     if (result?.tokenInfo) {
-      const response = NextResponse.next({ request: { headers: requestHeaders } });
+      const response = NextResponse.next({
+        request: { headers: requestHeaders },
+      });
       response.cookies.set({
         name: "accessToken",
         value: result.tokenInfo.accessToken,
@@ -99,8 +107,8 @@ export async function middleware(req: NextRequest) {
       return response;
     }
 
-    const isLoggedIn  = !!result?.user && !result.error;
-    const userRole    = result?.user?.user?.role;
+    const isLoggedIn = !!result?.user && !result.error;
+    const userRole = result?.user?.user?.role;
     const protectedRoute = isRouteProtected(userRole, nextUrl.pathname);
 
     if (isLoggedIn && protectedRoute) {
@@ -116,16 +124,20 @@ export async function middleware(req: NextRequest) {
         ? `${nextUrl.pathname}${nextUrl.search}`
         : nextUrl.pathname;
       return NextResponse.redirect(
-        new URL(`/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`, nextUrl)
+        new URL(
+          `/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+          nextUrl
+        )
       );
     }
 
     // Injecter x-nonce dans la requête transmise à l'app
-    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
     response.headers.set("Content-Security-Policy", csp);
     response.headers.set("x-nonce", nonce);
     return response;
-
   } catch (error) {
     console.error("Erreur dans le middleware:", error);
     return NextResponse.redirect(new URL("/auth/login", nextUrl));
