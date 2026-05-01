@@ -17,7 +17,7 @@ const appConfig = {
   },
   publicRoutes: ["/"],
   defaultLoginRedirect: "/test",
-  primaryColor: "#148D21",
+  primaryColor: "#000000",
 
   // Ajout d'une option pour autoriser ou non les connexions multiples
   allowMultipleSessions: false, // ou false pour invalider les anciennes sessions
@@ -25,19 +25,19 @@ const appConfig = {
   // Rate limiting global — par IP
   rateLimit: {
     windowMs: 60 * 1000, // Fenêtre de 60 secondes (au lieu de 10s trop facilement contournable)
-    max: 20,             // 20 requêtes max par IP par fenêtre (routes publiques)
+    max: 20, // 20 requêtes max par IP par fenêtre (routes publiques)
   },
 
   // Rate limiting strict pour les endpoints d'authentification sensibles
   rateLimitAuth: {
     windowMs: 15 * 60 * 1000, // Fenêtre de 15 minutes
-    max: 10,                   // 10 tentatives max par IP (login, signup, reset)
+    max: 10, // 10 tentatives max par IP (login, signup, reset)
   },
 
   // Rate limiting pour l'envoi d'emails (forgot-password, resend verification)
   rateLimitEmail: {
     windowMs: 60 * 60 * 1000, // Fenêtre de 1 heure
-    max: 5,                    // 5 emails max par IP par heure (anti email-bombing)
+    max: 5, // 5 emails max par IP par heure (anti email-bombing)
   },
 
   // Configuration du Backoff progressif
