@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
       lastActivity: new Date(),
       isImpersonation: false,
       impersonatedBy: null,
+      isDeleted: false,
     });
 
     // ─── Device + géoloc ─────────────────────────────────────────────────────

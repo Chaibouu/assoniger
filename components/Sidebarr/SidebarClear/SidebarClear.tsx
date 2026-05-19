@@ -6,13 +6,57 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { adminNavigation } from "@/settings/navigation";
+import {
+  adminNavigation,
+  type NavigationItem,
+} from "@/settings/navigation";
+import { useSession } from "@/context/SessionContext";
 import appConfig from "@/settings";
 import { Icon } from "@iconify/react";
 import { ChevronDown, Menu, X, PanelLeft, PanelLeftClose } from "lucide-react";
 
 const OPEN_WIDTH = 272;
 const CLOSED_WIDTH = 72;
+
+/** Égalité stricte (évite que /dashboard matche /dashboard/profile/...). */
+function pathnameEqualsRoute(route: string, pathname: string): boolean {
+  return pathname === route || pathname === `${route}/`;
+}
+
+/** Route ou sous-routes (ex. /dashboard/profile et /dashboard/profile/...). */
+function pathnameUnderRoute(route: string, pathname: string): boolean {
+  if (!route || route === "#") return false;
+  return pathnameEqualsRoute(route, pathname) || pathname.startsWith(`${route}/`);
+}
+
+/** Sous-lien le plus précis (chemins enfants les plus longs en premier). */
+function findBestMatchingChild(children: { path: string }[], pathname: string) {
+  const sorted = [...children].sort((a, b) => b.path.length - a.path.length);
+  return (
+    sorted.find((c) => pathnameEqualsRoute(c.path, pathname) || pathname.startsWith(`${c.path}/`)) ?? null
+  );
+}
+
+/** Filtre la nav selon `allowedRoles` (feuilles et enfants). Un parent à sous-menus n’apparaît que s’il reste au moins un enfant autorisé. */
+function filterNavigationByRole(
+  items: NavigationItem[],
+  userRole: string | undefined
+): NavigationItem[] {
+  if (!userRole) return [];
+  return items.flatMap((item) => {
+    if (item.children?.length) {
+      const children = item.children.filter((c) =>
+        c.allowedRoles.includes(userRole)
+      );
+      if (children.length === 0) return [];
+      return [{ ...item, children }];
+    }
+    if (item.allowedRoles.includes(userRole)) {
+      return [item];
+    }
+    return [];
+  });
+}
 
 export function SidebarClear() {
   const [hoverOpen, setHoverOpen] = useState(false);
@@ -129,6 +173,12 @@ function SidebarContent({
   isMobile,
   onNavigate,
 }: SidebarContentProps) {
+  const { user } = useSession();
+  const navigationItems = React.useMemo(
+    () => filterNavigationByRole(adminNavigation, user?.role),
+    [user?.role]
+  );
+
   return (
     <div className="flex flex-col h-full">
       {/* Header : logo + bouton pin */}
@@ -164,7 +214,7 @@ function SidebarContent({
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
         <nav className="space-y-0.5">
-          {adminNavigation.map((item, idx) => (
+          {navigationItems.map((item, idx) => (
             <NavItem
               key={idx}
               item={item}
@@ -265,18 +315,22 @@ function Logo({ open }: { open: boolean }) {
 /* ─── NavItem ────────────────────────────────────────────────────── */
 
 interface NavItemProps {
-  item: any;
+  item: NavigationItem;
   pathname: string;
   open: boolean;
   onNavigate?: () => void;
 }
 
 function NavItem({ item, pathname, open, onNavigate }: NavItemProps) {
-  const hasChildren = item.children && item.children.length > 0;
-  const isActive =
-    pathname === item.path ||
-    (hasChildren && item.children?.some((c: any) => pathname === c.path)) ||
-    (item.path !== "/" && pathname.startsWith(item.path));
+  const childrenList = item.children ?? [];
+  const hasChildren = childrenList.length > 0;
+  const matchedChild = hasChildren ? findBestMatchingChild(childrenList, pathname) : null;
+
+  const isActive = hasChildren
+    ? matchedChild !== null
+    : item.path === "/dashboard"
+      ? pathnameEqualsRoute("/dashboard", pathname)
+      : pathnameUnderRoute(item.path, pathname);
 
   const [expanded, setExpanded] = useState(isActive);
 
@@ -368,8 +422,8 @@ function NavItem({ item, pathname, open, onNavigate }: NavItemProps) {
                 className="ml-5 mt-0.5 mb-1 space-y-0.5 pl-3"
                 style={{ borderLeft: "1px solid rgba(255,255,255,0.2)" }}
               >
-                {item.children.map((child: any, idx: number) => {
-                  const isChildActive = pathname === child.path;
+                {childrenList.map((child, idx: number) => {
+                  const isChildActive = matchedChild?.path === child.path;
                   return (
                     <motion.div
                       key={idx}

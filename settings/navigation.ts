@@ -11,47 +11,123 @@ export interface NavigationItem {
   allowedRoles: string[];
 }
 
+export interface PublicNavigationItem {
+  label: string;
+  href: string;
+}
+
+/** Rôles autorisés pour la section Paramètres et ses sous-pages */
+const SETTINGS_ROLES = [
+  "ADMIN",
+  "SUPER_ADMIN",
+];
+
+/** Sections espace association (membres, adhésion, documents, candidat) */
+const ASSOCIATION_WORKSPACE_ROLES = ["ASSOCIATION", "ADMIN", "SUPER_ADMIN"];
+
 export const adminNavigation: NavigationItem[] = [
   {
     title: "Dashboard",
     icon: "material-symbols:dashboard",
     path: "/dashboard",
-    allowedRoles: ["USER"],
+    allowedRoles: ["USER","ADMIN","SUPER_ADMIN","ASSOCIATION"],
   },
   {
-    title: "Blogs",
-    icon: "material-symbols:home-work",
-    path: "/blogs",
-    allowedRoles: ["USER"],
+    title: "Profile",
+    icon: "material-symbols:person",
+    path: "/dashboard/profile",
+    allowedRoles: ["USER","ADMIN","SUPER_ADMIN","ASSOCIATION"],
   },
   {
-    title: "Test",
-    icon: "material-symbols:dashboard",
-    path: "/test",
-    allowedRoles: ["ADMIN", "USER"],
+    title: "Membres",
+    icon: "mdi:account-group-outline",
+    path: "/dashboard/membres-association",
+    allowedRoles: ASSOCIATION_WORKSPACE_ROLES,
   },
   {
-    title: "Paramètres",
-    icon: "material-symbols:settings",
-    path: "/dashboard/settings",
-    allowedRoles: ["USER"],
+    title: "Adhésion",
+    icon: "mdi:account-plus-outline",
+    path: "/dashboard/adhesion-association",
+    allowedRoles: ASSOCIATION_WORKSPACE_ROLES,
   },
   {
-    title: "Pages",
+    title: "Documents",
+    icon: "mdi:file-document-multiple-outline",
+    path: "/dashboard/documents-association",
+    allowedRoles: ASSOCIATION_WORKSPACE_ROLES,
+  },
+  {
+    title: "Candidat",
+    icon: "mdi:account-school-outline",
+    path: "/dashboard/candidat-association",
+    allowedRoles: ASSOCIATION_WORKSPACE_ROLES,
+  },
+  {
+    title: "Associations",
     icon: "eos-icons:admin",
     path: "#",
     children: [
       {
-        title: "Client",
-        path: "/dashboard/client",
-        allowedRoles: ["USER"],
+        title: "Associations",
+        path: "/dashboard/associations",
+        allowedRoles: ["ADMIN","SUPER_ADMIN"],
       },
       {
-        title: "Server",
-        path: "/dashboard/server",
-        allowedRoles: ["USER"],
+        title: "En Attente",
+        path: "/dashboard/associations/pending",
+        allowedRoles: ["ADMIN", "SUPER_ADMIN"],
       },
     ],
-    allowedRoles: ["USER"],
+    allowedRoles: ["ADMIN","SUPER_ADMIN"],
+  },
+  // {
+  //   title: "Test",
+  //   icon: "material-symbols:dashboard",
+  //   path: "/test",
+  //   allowedRoles: ["ADMIN", "SUPER_ADMIN"],
+  // },
+  {
+    title: "Paramètres",
+    icon: "material-symbols:settings",
+    path: "#",
+    children: [
+      {
+        title: "Vue d'ensemble",
+        path: "/dashboard/settings",
+        allowedRoles: SETTINGS_ROLES,
+      },
+      {
+        title: "Régions",
+        path: "/dashboard/settings/region",
+        allowedRoles: SETTINGS_ROLES,
+      },
+      {
+        title: "Départements",
+        path: "/dashboard/settings/departement",
+        allowedRoles: SETTINGS_ROLES,
+      },
+      {
+        title: "Communes",
+        path: "/dashboard/settings/commune",
+        allowedRoles: SETTINGS_ROLES,
+      },
+    ],
+    allowedRoles: SETTINGS_ROLES,
+  },
+
+];
+
+export const publicNavigation: PublicNavigationItem[] = [
+  {
+    label: "A propos",
+    href: "#apropos",
+  },
+  {
+    label: "Associations",
+    href: "#associations",
+  },
+  {
+    label: "Contact",
+    href: "#contact",
   },
 ];

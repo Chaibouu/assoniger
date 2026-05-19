@@ -7,9 +7,8 @@ import { useRouter } from "next/navigation";
 import { useSession } from "@/context/SessionContext";
 import { SidebarClear } from "@/components/Sidebarr/SidebarClear/SidebarClear";
 import HeaderClear from "@/components/Sidebarr/SidebarClear/Header";
-import { Sidebar2 } from "@/components/Sidebar2/Sidebar2";
-import { Loader } from "@/components/common/Loader";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { QueryProvider } from "@/components/providers/query-provider";
 
 export default function DashboardLayout({
   children,
@@ -17,30 +16,24 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const { user, isAuthenticated } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    // Vérifier l'authentification après le montage du composant
     if (!isAuthenticated && !user) {
       router.push("/auth/login");
-    } else {
-      setIsLoading(false);
     }
   }, [isAuthenticated, user, router]);
 
-  // Afficher un loader pendant la vérification de l'authentification
-  if (isLoading) {
-    return <Loader />;
-  }
+  /* Pas de loader global ici : la session vient déjà du SSR (RootLayout + middleware).
+     Un état `isLoading: true` initial forçait un écran de chargement à *chaque* navigation. */
 
-  // Rediriger si l'utilisateur n'est pas authentifié
   if (!isAuthenticated && !user) {
     return null;
   }
 
   return (
+    <QueryProvider>
     <div className="dark:bg-boxdark-2 dark:text-bodydark">
       <div className="flex h-screen overflow-hidden">
         {/* <!-- ===== Sidebar Start ===== --> */}
@@ -69,6 +62,7 @@ export default function DashboardLayout({
         {/* <!-- ===== Content Area End ===== --> */}
       </div>
     </div>
+    </QueryProvider>
   );
 }
 

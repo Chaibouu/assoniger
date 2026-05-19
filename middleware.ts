@@ -35,6 +35,8 @@ function buildCspWithNonce(nonce: string): string {
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://firebasestorage.googleapis.com",
+    "frame-src 'self' blob:",
+    "worker-src 'self' blob:",
     "font-src 'self' data:",
     isDev ? "connect-src 'self' ws: wss: http: https:" : "connect-src 'self'",
     "frame-ancestors 'none'",
@@ -52,6 +54,7 @@ export async function middleware(req: NextRequest) {
   try {
     const isApiRoute = nextUrl.pathname.startsWith("/api");
     const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
+    const isApiPublicRoute = nextUrl.pathname.startsWith("/api/public");
     const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
     const isAuthRoute = authRoutes.includes(nextUrl.pathname);
 
@@ -68,7 +71,7 @@ export async function middleware(req: NextRequest) {
 
     // ─── Routes API ────────────────────────────────────────────────────────
     if (isApiRoute) {
-      if (!isPublicRoute) {
+      if (!isPublicRoute && !isApiPublicRoute) {
         const authorizationHeader = req.headers.get("Authorization");
         const accessToken = authorizationHeader?.split(" ")[1];
         if (!accessToken) {

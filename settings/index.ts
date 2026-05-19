@@ -1,9 +1,9 @@
 const appConfig = {
-  appName: "Sahel Coders Starter",
-  websiteTitle: "Website Starter",
+  appName: "AssoNiger",
+  websiteTitle: "Plateforme des Associations du Niger",
   websiteDescription:
-    "Sahel Coders simple authentication service and admin panel",
-  logoUrl: "/logo.jpg",
+    "L'annuaire officiel des associations nigériennes – Trouvez, rejoignez ou soutenez une association près de chez vous",
+  logoUrl: "/logo.png",
   sidebarClearlogoUrl: "/sahel_coders_logo.png",
   adminSidebarColor: "#1C2434",
   mailOptions: {
@@ -15,9 +15,16 @@ const appConfig = {
       pass: process.env.MAIL_AUTH_PASSWORD,
     },
   },
+
+  // Coordonnées (ajout)
+  contactEmail: "contact@assosniger.org",
+  contactPhone: "+227 80 00 00 00",
+  contactAddress: "Niamey, Niger - Quartier Plateau",
+
   publicRoutes: ["/"],
   defaultLoginRedirect: "/test",
-  primaryColor: "#000000",
+  primaryColor: "#0DB02B",      // Vert
+  secondaryColor: "#E05206", // Orange
 
   // Ajout d'une option pour autoriser ou non les connexions multiples
   allowMultipleSessions: false, // ou false pour invalider les anciennes sessions

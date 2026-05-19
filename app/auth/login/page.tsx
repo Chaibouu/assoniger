@@ -1,12 +1,9 @@
-import { LoginForm } from '@/components/auth/login-form'
-import React from 'react'
+import { LoginForm } from "@/components/auth/login-form";
 
-const Login = () => {
+export default function LoginPage() {
   return (
-    <>
-    <LoginForm/>
-    </>
-  )
+    <div className="flex h-full min-h-0 w-full items-center justify-center overflow-y-auto px-4 py-12">
+      <LoginForm />
+    </div>
+  );
 }
-
-export default Login

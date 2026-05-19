@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { getAuthenticatedUser } from "@/lib/auth-utils";
+import appConfig from "@/settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,30 +25,39 @@ async function ProfileInfo() {
 
   return (
     <div className="space-y-6">
-      {/* En-tête du profil */}
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-8 rounded-lg">
-        <div className="flex items-center space-x-6">
-          <Avatar className="h-20 w-20">
-            <AvatarImage src="/placeholder-avatar.jpg" alt={userInfo.name} />
-            <AvatarFallback className="text-2xl">
-              {userInfo.name.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {userInfo.name}
-            </h1>
-            <p className="text-gray-600 mb-2">{userInfo.email}</p>
-            <div className="flex items-center space-x-4">
-              <Badge variant="outline">{userInfo.role}</Badge>
-              <span className="text-sm text-gray-500">
-                Membre depuis {new Date(userInfo.createdAt).toLocaleDateString()}
-              </span>
+      {/* En-tête du profil (barre couleur principale comme sur la page de connexion) */}
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+        <div
+          className="h-1.5 w-full shrink-0 rounded-t-xl"
+          style={{ backgroundColor: appConfig.primaryColor }}
+          aria-hidden
+        />
+        <div className="p-6 sm:p-8">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:space-x-6">
+            <Avatar className="h-20 w-20">
+              <AvatarImage src="/placeholder-avatar.jpg" alt={userInfo.name} />
+              <AvatarFallback className="text-2xl">
+                {userInfo.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {userInfo.name}
+              </h1>
+              <p className="text-gray-600 mb-2">{userInfo.email}</p>
+              <div className="flex items-center space-x-4">
+                <Badge variant="outline">{userInfo.role}</Badge>
+                <span className="text-sm text-gray-500">
+                  Membre depuis {new Date(userInfo.createdAt).toLocaleDateString()}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex space-x-2">
-            <Button variant="outline">Modifier le profil</Button>
-            <Button>Paramètres</Button>
+            <div className="flex flex-wrap gap-2 sm:shrink-0">
+              <Button variant="outline">Modifier le profil</Button>
+              <Button style={{ backgroundColor: appConfig.primaryColor }} className="text-white hover:opacity-90">
+                Paramètres
+              </Button>
+            </div>
           </div>
         </div>
       </div>

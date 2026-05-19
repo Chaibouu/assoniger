@@ -31,12 +31,15 @@ export async function POST(req: NextRequest) {
     const rlResponse = await rateLimitRedisAuth(ip);
     if (rlResponse) return rlResponse;
 
-    const { email, password, rememberMe } = await req.json();
+    const body = await req.json();
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    const password = typeof body.password === "string" ? body.password.trim() : "";
+    const rememberMe = Boolean(body.rememberMe);
 
     if (!email) return NextResponse.json({ error: "L'email est requis" }, { status: 400 });
     if (!password) return NextResponse.json({ error: "Le mot de passe est requis" }, { status: 400 });
 
-    const parsedData = LoginSchema.safeParse({ email, password });
+    const parsedData = LoginSchema.safeParse({ email, password, rememberMe });
     if (!parsedData.success) {
       return NextResponse.json(
         { error: parsedData.error.issues.map((i) => i.message).join(", ") },
@@ -86,7 +89,19 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── Vérification du mot de passe ─────────────────────────────────────────
-    const isPasswordValid = await bcrypt.compare(password, user.password as string);
+    if (!user.password) {
+      await incrementFailedAttempt(user.id);
+      await audit({
+        userId: user.id,
+        action: "LOGIN_FAILURE",
+        ipAddress: ip,
+        status: "FAILURE",
+        metadata: { reason: "Mot de passe absent sur le compte" },
+      });
+      return NextResponse.json({ error: "Email ou mot de passe incorrect" }, { status: 401 });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       await incrementFailedAttempt(user.id);
@@ -125,6 +140,7 @@ export async function POST(req: NextRequest) {
       lastActivity: new Date(),
       isImpersonation: false,
       impersonatedBy: null,
+      isDeleted: false,
     });
 
     // ─── Device + géoloc ──────────────────────────────────────────────────────

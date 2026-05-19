@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
         "image/gif",
         "application/pdf",
       ],
-      destination: "public/uploads",
+      destination: "uploads",
     };
 
     // Valider le fichier

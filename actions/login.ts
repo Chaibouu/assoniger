@@ -1,6 +1,7 @@
 "use server";
 
 import { LoginSchema } from "@/schemas";
+import { getInternalAppOrigin } from "@/lib/internal-app-url";
 import { setMultipleCookies } from "./setMultipleCookies";
 
 export const login = async (data: {
@@ -22,15 +23,12 @@ export const login = async (data: {
   const { email, password, rememberMe } = validatedData.data;
 
   try {
-    // Appeler l'API login
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/login`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, rememberMe }),
-      }
-    );
+    const origin = await getInternalAppOrigin();
+    const response = await fetch(`${origin}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, rememberMe }),
+    });
 
     const result = await response.json();
 

@@ -1,9 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    /**
+     * Pino + pino-pretty utilisent thread-stream / worker_threads.
+     * Sans cette liste, Webpack les bundle sous vendor-chunks et le worker
+     * est résolu vers un chemin invalide (MODULE_NOT_FOUND ... lib/worker.js).
+     */
+    serverExternalPackages: ["pino", "pino-pretty", "thread-stream", "pdf-parse", "tesseract.js"],
+
     // Optimisations pour Next.js 15
     experimental: {
         // Amélioration des performances
-        optimizePackageImports: ['@radix-ui/react-icons', 'lucide-react'],
+        // lucide-react retiré : optimizePackageImports peut laisser certains icônes (ex. ExternalLink) undefined au runtime.
+        optimizePackageImports: ['@radix-ui/react-icons'],
         // Amélioration du bundling
         turbo: {
             rules: {
@@ -37,6 +45,27 @@ const nextConfig = {
     // Configuration des en-têtes de sécurité
     async headers() {
         return [
+            {
+                source: '/uploads/:path*',
+                headers: [
+                    {
+                        key: 'X-Frame-Options',
+                        value: 'SAMEORIGIN',
+                    },
+                    {
+                        key: 'X-Content-Type-Options',
+                        value: 'nosniff',
+                    },
+                    {
+                        key: 'Referrer-Policy',
+                        value: 'no-referrer',
+                    },
+                    {
+                        key: 'Permissions-Policy',
+                        value: 'camera=(), microphone=(), geolocation=(), payment=()',
+                    },
+                ],
+            },
             {
                 source: '/(.*)',
                 headers: [

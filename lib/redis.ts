@@ -12,7 +12,6 @@
  */
 
 import Redis from "ioredis";
-import { logger } from "./logger";
 
 // Singleton — évite les connexions multiples lors du hot-reload Next.js en dev
 declare global {
@@ -31,9 +30,12 @@ function createRedisClient(): Redis {
     commandTimeout: 3000,
   });
 
-  client.on("connect", () => logger.info({ url: url.replace(/:\/\/.*@/, "://***@") }, "Redis connecté"));
-  client.on("error",   (err) => logger.error({ err }, "Redis erreur"));
-  client.on("close",   () => logger.warn({}, "Redis connexion fermée"));
+  // Éviter Pino ici : en cas de worker transport cassé, ça peut provoquer des uncaughtException en boucle.
+  client.on("connect", () =>
+    console.log("Redis connecté", { url: url.replace(/:\/\/.*@/, "://***@") })
+  );
+  client.on("error", (err) => console.error("Redis erreur", { err }));
+  client.on("close", () => console.warn("Redis connexion fermée"));
 
   return client;
 }

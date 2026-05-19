@@ -5,11 +5,17 @@ datasource db {
 
 generator client {
     provider = "prisma-client-js"
+    
 }
 
 enum UserRole {
     ADMIN
     USER
+    MEMBER
+    SUPER_ADMIN
+    MODERATOR
+    ASSOCIATION
+    CITIZEN
 }
 
 model User {
@@ -35,6 +41,9 @@ model User {
     auditLogs             AuditLog[]
     blogs                 Blog[]
     blogPosts             BlogPost[]
+    verifiedAssociations Association[]          @relation("AssociationVerifiedBy")
+    managedAssociations  Association[]          @relation("AssociationManagedBy")
+    associationReviews   AssociationVerification[]
 }
 
 model Account {
@@ -50,6 +59,7 @@ model Account {
     scope             String?
     id_token          String? @db.Text
     session_state     String?
+    isDeleted         Boolean @default(false)
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -68,6 +78,7 @@ model Session {
     // Impersonation admin
     isImpersonation Boolean @default(false) // True si cette session est une impersonation
     impersonatedBy  String? // ID de l'admin qui a initié l'impersonation
+    isDeleted       Boolean @default(false)
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -79,6 +90,7 @@ model VerificationToken {
     token   String   @unique
     expires DateTime
     tokenId String   @unique
+    isDeleted Boolean @default(false)
 
     @@unique([email, token])
 }
@@ -89,6 +101,7 @@ model PasswordResetToken {
     token   String   @unique
     expires DateTime
     tokenId String   @unique
+    isDeleted Boolean @default(false)
 
     @@unique([email, token])
 }
@@ -98,6 +111,7 @@ model TwoFactorToken {
     email   String
     token   String   @unique
     expires DateTime
+    isDeleted Boolean @default(false)
 
     @@unique([email, token])
 }
@@ -107,6 +121,7 @@ model TwoFactorConfirmation {
 
     userId String
     user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    isDeleted Boolean @default(false)
 
     @@unique([userId])
 }
@@ -116,6 +131,7 @@ model FailedLoginAttempt {
     userId    String // Clé étrangère pour l'utilisateur
     user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
     attemptAt DateTime @default(now()) // Timestamp de la tentative
+    isDeleted Boolean  @default(false)
 }
 
 model UserDevice {
@@ -131,6 +147,7 @@ model UserDevice {
     city      String? // Ville obtenue à partir de la géolocalisation
     country   String? // Pays obtenu à partir de la géolocalisation
     createdAt DateTime @default(now()) // Date de la création de l'enregistrement
+    isDeleted Boolean  @default(false)
 }
 
 model Job {
@@ -142,6 +159,7 @@ model Job {
     createdAt   DateTime  @default(now())
     updatedAt   DateTime  @updatedAt
     completedAt DateTime?
+    isDeleted   Boolean   @default(false)
 }
 
 model Setting {
@@ -152,6 +170,7 @@ model Setting {
     isCustomizable Boolean  @default(true)
     createdAt      DateTime @default(now())
     updatedAt      DateTime @updatedAt
+    isDeleted      Boolean  @default(false)
 
     @@map("settings")
 }
@@ -166,6 +185,7 @@ model AuditLog {
     status    String   // "SUCCESS" | "FAILURE"
     metadata  Json?    // Données contextuelles (email, raison, device…)
     createdAt DateTime @default(now())
+    isDeleted Boolean  @default(false)
 
     @@index([userId])
     @@index([action])
@@ -212,4 +232,507 @@ model BlogPost {
     author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
     @@map("blog_posts")
+}
+
+
+// ============================================
+// MODÈLE PRINCIPAL : Association
+// ============================================
+model Association {
+  id                    String          @id @default(cuid())
+  registrationNumber    String?         @unique // Numéro récépissé (unique)
+  status                AssociationStatus @default(PENDING)
+  
+  // Informations générales
+  name                  String          // Nom officiel de l'association
+  acronym               String?         // Sigle (ex: ASEFE, ONEN)
+  slogan                String?         // Devise ou phrase d'accroche
+  description           String          @db.Text // Description détaillée
+  logoUrl               String?         // URL du logo
+  coverImageUrl         String?         // Image de couverture
+  
+  // Date de création
+  foundingDate          DateTime?       // Date de création de l'association
+  
+  // Domaines d'activité (relation many-to-many)
+  domains               AssociationToDomain[]   // via AssociationToDomain
+  
+  // Coordonnées
+  contactEmail          String          // Email officiel
+  contactPhone          String          // Téléphone principal
+  contactWhatsapp       String?         // WhatsApp (optionnel)
+  website               String?         // Site web
+  facebookPage          String?         // Page Facebook
+  twitterHandle         String?         // Twitter/X
+  
+  // Adresse — référentiel géographique (commune ⊂ département ⊂ région)
+  address               String?         @db.Text // Adresse complète
+  country               String          @default("Niger")
+  regionId              String
+  region                Region          @relation(fields: [regionId], references: [id], onDelete: Restrict)
+  departementId         String?
+  departement           Departement?    @relation(fields: [departementId], references: [id], onDelete: SetNull)
+  communeId             String?
+  commune               Commune?        @relation(fields: [communeId], references: [id], onDelete: SetNull)
+  latitude              Float?          // Géolocalisation
+  longitude             Float?          // Géolocalisation
+  
+  // Statut légal
+  legalStatus           LegalStatus     // Statut juridique
+  receiptNumber         String?         // Numéro du récépissé
+  receiptFileUrl        String?         // Copie du récépissé (PDF)
+  receiptExpiryDate     DateTime?       // Date d'expiration du récépissé
+  nif                   String?         // Numéro d'identification fiscale
+  ninea                String?         // Numéro statistique (NINEA)
+  
+  // Effectifs
+  totalMembers          Int?            // Nombre total de membres
+  totalVolunteers       Int?            // Nombre de bénévoles
+  totalStaff            Int?            // Nombre de salariés
+  
+  // Budget et financement
+  annualBudget          Float?          // Budget annuel (en FCFA)
+  fundingSources        String?         // Sources de financement (texte)
+  bankAccountName       String?         // Nom du compte bancaire
+  bankName              String?         // Banque
+  bankAccountNumber     String?         // Numéro de compte (chiffré)
+  
+  // Documents légaux
+  statutesFileUrl       String?         // Statuts PDF
+  governingBoardFileUrl String?         // Composition du bureau PDF
+  taxClearanceUrl       String?         // Quitus fiscal
+  
+  // Visibilité et préférences
+  acceptPublicContact   Boolean         @default(true) // Accepter d'être contacté
+  acceptDonations       Boolean         @default(false) // Accepter les dons
+  displayMembersList    Boolean         @default(false) // Afficher les membres
+  newsletterSubscribed  Boolean         @default(true) // Abonné à la newsletter
+  
+  // Champs d'administration
+  adminNotes            String?         @db.Text // Notes internes de l'admin
+  verifiedBy            User?           @relation("AssociationVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedById          String?
+  verifiedAt            DateTime?
+  rejectedReason        String?         @db.Text // Raison du rejet
+  
+  // Relations avec les utilisateurs
+  user                  User?           @relation("AssociationManagedBy", fields: [userId], references: [id])
+  userId                String?         // ID du compte admin de l'association
+  
+  // Relations vers les autres modèles
+  members               AssociationMember[]
+  events                AssociationEvent[]
+  projects              AssociationProject[]
+  needs                 AssociationNeed[]
+  documents             AssociationDocument[]
+  verifications         AssociationVerification[]
+  activityLogs          ActivityLog[]
+  adminAccount          AssociationUser?
+  
+  // Timestamps
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  isDeleted             Boolean         @default(false)
+  deletedAt             DateTime?       // Soft delete
+  
+  @@index([name])
+  @@index([regionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================
+// Référentiel géographique : Région → Département → Commune
+// Tables `regions`, `departements`, `communes`. Données initiales : `prisma/seed.ts` + `lib/geo-seed-data.ts`.
+// Lecture publique (formulaires) : GET `/api/public/geo`. CRUD admin : `/api/admin/geo/*` (Bearer JWT).
+// ============================================
+model Region {
+  id           String        @id @default(cuid())
+  code         String        @unique // Ex: NIAMEY (stable pour APIs / filtres)
+  name         String
+  departements Departement[]
+  associations Association[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  isDeleted    Boolean       @default(false)
+
+  @@map("regions")
+}
+
+model Departement {
+  id          String    @id @default(cuid())
+  regionId    String
+  region      Region    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  code        String?   // Code administratif optionnel
+  name        String
+  communes    Commune[]
+  associations Association[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  isDeleted   Boolean   @default(false)
+
+  @@unique([regionId, name])
+  @@index([regionId])
+  @@map("departements")
+}
+
+model Commune {
+  id            String       @id @default(cuid())
+  departementId String
+  departement   Departement  @relation(fields: [departementId], references: [id], onDelete: Cascade)
+  code          String?
+  name          String
+  associations  Association[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  isDeleted     Boolean      @default(false)
+
+  @@unique([departementId, name])
+  @@index([departementId])
+  @@map("communes")
+}
+
+// ============================================
+// ENUM : Statut de l'association
+// ============================================
+enum AssociationStatus {
+  PENDING      // En attente de validation
+  VERIFIED     // Validée par l'admin
+  ACTIVE       // Active et visible sur la plateforme
+  REJECTED     // Rejetée
+  SUSPENDED    // Suspendue
+  INACTIVE     // Inactive (à réactiver)
+  DELETED      // Supprimée
+}
+
+// ============================================
+// ENUM : Statut juridique
+// ============================================
+enum LegalStatus {
+  DECLARED
+  PUBLIC_UTILITY
+  COOPERATIVE
+  MUTUAL
+  UNION
+  OTHER
+}
+
+// ============================================
+// MODÈLE : Domaines d'activité
+// ============================================
+model Domain {
+  id          String   @id @default(cuid())
+  name        String   @unique // Ex: Santé, Education, Environnement
+  nameHausa   String?  // Nom en Haoussa
+  nameZarma   String?  // Nom en Zarma
+  icon        String?  // Icône (FontAwesome/Emoji)
+  color       String?  // Couleur associée (hex)
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  isDeleted   Boolean  @default(false)
+  order       Int      @default(0)
+  
+  associations AssociationToDomain[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([name])
+}
+
+// ============================================
+// TABLE DE LIAISON : Association <-> Domain
+// ============================================
+model AssociationToDomain {
+  associationId   String
+  domainId        String
+  isPrimary       Boolean @default(false) // Domaine principal
+  createdAt       DateTime @default(now())
+  isDeleted       Boolean @default(false)
+  
+  association     Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  domain          Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  
+  @@id([associationId, domainId])
+  @@index([associationId])
+  @@index([domainId])
+}
+
+// ============================================
+// MODÈLE : Membres de l'association (Bureau)
+// ============================================
+model AssociationMember {
+  id            String   @id @default(cuid())
+  associationId String
+  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  
+  fullName      String   // Nom complet
+  position      String   // Poste (Président, Secrétaire, etc.)
+  phone         String?  // Téléphone
+  email         String?  // Email
+  photoUrl      String?  // Photo
+  isPrimary     Boolean  @default(false) // Contact principal
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  isDeleted     Boolean  @default(false)
+  
+  @@index([associationId])
+}
+
+// ============================================
+// MODÈLE : Événements de l'association
+// ============================================
+model AssociationEvent {
+  id            String      @id @default(cuid())
+  associationId String
+  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String      @db.Text
+  eventType     EventType   @default(OTHER)
+  startDate     DateTime
+  endDate       DateTime?
+  location      String?
+  isOnline      Boolean     @default(false)
+  meetingLink   String?     // Lien Zoom/Google Meet
+  maxAttendees  Int?
+  imageUrl      String?
+  
+  status        EventStatus @default(DRAFT)
+  publishedAt   DateTime?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  isDeleted     Boolean     @default(false)
+  
+  @@index([associationId])
+  @@index([startDate])
+}
+
+// ============================================
+// MODÈLE : Projets de l'association
+// ============================================
+model AssociationProject {
+  id            String       @id @default(cuid())
+  associationId String
+  association   Association  @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String       @db.Text
+  startDate     DateTime?
+  endDate       DateTime?
+  budget        Float?
+  status        ProjectStatus @default(PLANNED)
+  imageUrl      String?
+  
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  isDeleted     Boolean      @default(false)
+  
+  @@index([associationId])
+}
+
+// ============================================
+// MODÈLE : Besoins (appels à dons/bénévoles)
+// ============================================
+model AssociationNeed {
+  id            String      @id @default(cuid())
+  associationId String
+  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String      @db.Text
+  needType      NeedType    @default(MATERIAL)
+  urgency       UrgencyLevel @default(MEDIUM)
+  quantity      String?     // Ex: "50kg de riz", "10 bénévoles"
+  targetAmount  Float?      // Pour les besoins financiers
+  currentAmount Float?      @default(0)
+  
+  status        NeedStatus  @default(OPEN)
+  expiresAt     DateTime?   // Date d'expiration du besoin
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  isDeleted     Boolean     @default(false)
+  
+  @@index([associationId])
+  @@index([needType])
+  @@index([status])
+}
+
+// ============================================
+// MODÈLE : Documents légaux uploadés
+// ============================================
+model AssociationDocument {
+  id            String          @id @default(cuid())
+  associationId String
+  association   Association     @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  
+  documentType  DocumentType
+  fileName      String
+  fileUrl       String
+  fileSize      Int?            // Taille en bytes
+  mimeType      String?
+  isVerified    Boolean         @default(false)
+  verifiedAt    DateTime?
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  isDeleted     Boolean         @default(false)
+  
+  @@index([associationId])
+  @@index([documentType])
+}
+
+// ============================================
+// MODÈLE : Historique des vérifications
+// ============================================
+model AssociationVerification {
+  id            String      @id @default(cuid())
+  associationId String
+  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  adminId       String
+  admin         User        @relation(fields: [adminId], references: [id])
+  
+  action        VerificationAction
+  oldStatus     AssociationStatus?
+  newStatus     AssociationStatus
+  comment       String?     @db.Text
+  
+  createdAt     DateTime    @default(now())
+  isDeleted     Boolean     @default(false)
+  
+  @@index([associationId])
+  @@index([adminId])
+}
+
+// ============================================
+// MODÈLE : Utilisateur (compte admin de l'association)
+// ============================================
+model AssociationUser {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  role              UserRole  @default(ASSOCIATION)
+  firstName         String?
+  lastName          String?
+  phone             String?
+  image             String?
+  address           String?
+  isActive          Boolean   @default(true)
+  isDeleted         Boolean   @default(false)
+  lastLoginAt       DateTime?
+  
+  associationId     String?   @unique
+  association       Association? @relation(fields: [associationId], references: [id], onDelete: SetNull) // L'association gérée par cet utilisateur
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([email])
+}
+
+// ============================================
+// MODÈLE : Logs d'activité
+// ============================================
+model ActivityLog {
+  id          String   @id @default(cuid())
+  associationId String
+  association Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  userId      String?
+  action      String   // CREATE, UPDATE, DELETE, etc.
+  entity      String   // Association, Event, Project, etc.
+  entityId    String
+  oldValues   Json?    // Changements avant
+  newValues   Json?    // Changements après
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+  isDeleted   Boolean  @default(false)
+  
+  @@index([associationId])
+  @@index([createdAt])
+}
+
+// ============================================
+// ENUMS supplémentaires
+// ============================================
+enum EventType {
+  MEETING
+  WORKSHOP
+  TRAINING
+  FUNDRAISING
+  VOLUNTEERING
+  CULTURAL
+  SPORTS
+  CONFERENCE
+  CONCERT
+  FESTIVAL
+  OTHER_CULTURAL
+  OTHER_SPORTS
+  OTHER_EDUCATION
+  OTHER_ENVIRONMENT
+  OTHER_MEDICAL
+  OTHER_OTHER
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum ProjectStatus {
+  PLANNED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum NeedType {
+  MATERIAL     // Matériel
+  FINANCIAL    // Financier
+  VOLUNTEER    // Bénévoles
+  SERVICE      // Service
+  SPACE        // Espace/Local
+  MEDICAL      // Santé
+  EDUCATION    // Éducation
+  ENVIRONMENT  // Environnement
+  OTHER        // Autre
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NeedStatus {
+  OPEN
+  FILLED
+  EXPIRED
+  CANCELLED
+}
+
+enum DocumentType {
+  STATUTES           // Statuts
+  RECEIPT            // Récépissé
+  GOVERNING_BOARD    // Composition du bureau
+  TAX_CLEARANCE      // Quitus fiscal
+  ANNUAL_REPORT      // Rapport d'activités
+  FINANCIAL_REPORT   // Rapport financier
+  OTHER
+}
+
+enum VerificationAction {
+  SUBMIT     // Soumission pour validation
+  APPROVE    // Approbation
+  REJECT     // Rejet
+  SUSPEND    // Suspension
+  REINSTATE  // Réactivation
+  UPDATE     // Mise à jour des infos
 }

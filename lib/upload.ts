@@ -6,6 +6,11 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import { randomUUID } from "crypto";
+import {
+  normalizeUploadDestination,
+  resolveSafeUploadsDiskPath,
+  toPublicUploadUrl,
+} from "@/lib/upload-paths";
 
 export interface UploadOptions {
   maxSize?: number;       // Taille maximale en bytes
@@ -21,7 +26,8 @@ export interface UploadResult {
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-const DEFAULT_DESTINATION = "public/uploads";
+/** Dossier par défaut à la racine du projet ; exposé sous `/uploads/...`. */
+const DEFAULT_DESTINATION_RELATIVE = "uploads";
 
 // ─── Magic Numbers ────────────────────────────────────────────────────────────
 // Signatures binaires des types de fichiers autorisés.
@@ -136,9 +142,11 @@ export async function uploadFile(
     );
   }
 
-  // 3. Préparer le chemin de destination
-  const destination = options.destination ?? DEFAULT_DESTINATION;
-  const uploadDir = join(process.cwd(), destination);
+  // 3. Écriture sous `uploads/` à la racine ; lecture HTTP via `app/uploads/[...path]/route.ts`.
+  const relativeDest = normalizeUploadDestination(
+    options.destination ?? DEFAULT_DESTINATION_RELATIVE
+  );
+  const uploadDir = join(process.cwd(), relativeDest);
 
   if (!existsSync(uploadDir)) {
     await mkdir(uploadDir, { recursive: true });
@@ -156,9 +164,11 @@ export async function uploadFile(
   // 5. Écriture sur le disque
   await writeFile(filepath, new Uint8Array(buffer));
 
+  const publicUrlPath = toPublicUploadUrl(relativeDest, filename);
+
   return {
     filename,
-    path: `/${destination}/${filename}`,
+    path: publicUrlPath,
     size: file.size,
     mimetype: file.type,
   };
@@ -186,9 +196,12 @@ export async function uploadFromFormData(
  */
 export async function deleteUploadedFile(filepath: string): Promise<void> {
   const { unlink } = await import("fs/promises");
-  const fullPath = join(process.cwd(), filepath);
-
-  if (existsSync(fullPath)) {
-    await unlink(fullPath);
+  const normalized = filepath.trim().startsWith("/")
+    ? filepath.trim()
+    : `/${filepath.trim().replace(/^\/+/, "")}`;
+  const abs = resolveSafeUploadsDiskPath(normalized);
+  if (!abs || !existsSync(abs)) {
+    return;
   }
+  await unlink(abs);
 }

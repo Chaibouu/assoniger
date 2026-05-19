@@ -39,14 +39,20 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── Vérification HIBP — mot de passe compromis ? ─────────────────────────
-    const { pwned, count } = await checkPasswordPwned(password);
-    if (pwned) {
-      return NextResponse.json(
-        {
-          error: `Ce mot de passe a été compromis dans ${count.toLocaleString("fr-FR")} fuite${count > 1 ? "s" : ""} de données. Choisissez un mot de passe différent.`,
-        },
-        { status: 400 }
-      );
+    const skipHibpCheck =
+      process.env.NODE_ENV !== "production" &&
+      process.env.SKIP_HIBP_CHECK === "true";
+
+    if (!skipHibpCheck) {
+      const { pwned, count } = await checkPasswordPwned(password);
+      if (pwned) {
+        return NextResponse.json(
+          {
+            error: `Ce mot de passe a été compromis dans ${count.toLocaleString("fr-FR")} fuite${count > 1 ? "s" : ""} de données. Choisissez un mot de passe différent.`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);

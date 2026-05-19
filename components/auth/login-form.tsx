@@ -24,6 +24,7 @@ import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
 import { login } from "@/actions/login";
 import { Checkbox } from "@/components/ui/checkbox"
+import appConfig from "@/settings";
 
 
 
@@ -160,7 +161,8 @@ export const LoginForm = () => {
                           size="sm"
                           variant="link"
                           asChild
-                          className="px-0 font-normal hover:text-gray-400"
+                          className="px-0 font-normal"
+                          style={{ color: appConfig.secondaryColor }}
                         >
                           <Link href="/auth/forgot-password" className="text-[14px]">
                             Forgot password?
@@ -201,7 +203,10 @@ export const LoginForm = () => {
           <Button
             disabled={isPending}
             type="submit"
-            className="w-full"
+            className="w-full text-white"
+            style={{
+              backgroundColor: appConfig.primaryColor,
+            }}
           >
             {showTwoFactor ? "Confirm" : "Login"}
           </Button>

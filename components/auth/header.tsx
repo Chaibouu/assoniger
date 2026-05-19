@@ -1,7 +1,7 @@
 import { Poppins } from "next/font/google";
+import Image from "next/image";
 
 import { cn } from "@/lib/utils";
-import appConfig from "@/settings";
 
 const font = Poppins({
   subsets: ["latin"],
@@ -17,12 +17,14 @@ export const Header = ({
 }: HeaderProps) => {
   return (
     <div className="w-full flex flex-col gap-y-4 items-center justify-center">
-      <h1 className={cn(
-        "text-3xl font-semibold",
-        font.className,
-      )}>
-         {appConfig.appName}
-      </h1>
+      <Image
+        src="/logo.png"
+        alt="Logo Assos Niger"
+        width={120}
+        height={120}
+        priority
+        className="h-auto w-20 sm:w-24"
+      />
       <p className="text-muted-foreground text-sm">
         {label}
       </p>
