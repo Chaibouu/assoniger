@@ -1,33 +1,17 @@
-import { Poppins } from "next/font/google";
-import Image from "next/image";
-
-import { cn } from "@/lib/utils";
-
-const font = Poppins({
-  subsets: ["latin"],
-  weight: ["600"],
-});
-
 interface HeaderProps {
   label: string;
 };
 
-export const Header = ({
-  label,
-}: HeaderProps) => {
+export const Header = ({ label }: HeaderProps) => {
   return (
-    <div className="w-full flex flex-col gap-y-4 items-center justify-center">
-      <Image
+    <div className="flex w-full flex-col items-center justify-center gap-y-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         src="/logo.png"
-        alt="Logo Assos Niger"
-        width={120}
-        height={120}
-        priority
-        className="h-auto w-20 sm:w-24"
+        alt="Logo AssoNiger"
+        className="h-auto w-20"
       />
-      <p className="text-muted-foreground text-sm">
-        {label}
-      </p>
+      <p className="text-sm text-muted-foreground">{label}</p>
     </div>
   );
 };

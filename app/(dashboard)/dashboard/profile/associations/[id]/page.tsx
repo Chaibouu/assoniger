@@ -208,41 +208,90 @@ export default async function AssociationProfileWorkspacePage({
       </div>
 
       <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="h-1 w-full shrink-0" style={{ backgroundColor: appConfig.primaryColor }} aria-hidden />
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-          <div className="min-w-0 space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{association.name}</h1>
-            <p className="text-sm text-muted-foreground">
-              {association.acronym || "Sans sigle"} · Créée le{" "}
-              {new Date(association.createdAt).toLocaleDateString("fr-FR", {
-                dateStyle: "long",
-              })}
-            </p>
-            {association.userId ? (
-              <p className="text-xs text-muted-foreground">
-                Compte lié :{" "}
-                <span className="font-mono text-foreground">{association.user?.email ?? association.userId}</span>
-              </p>
-            ) : (
-              <p className="text-xs text-amber-700 dark:text-amber-200">Aucun compte utilisateur lié.</p>
-            )}
+        {/* Cover image ou gradient header */}
+        {association.coverImageUrl ? (
+          <div className="relative h-32 w-full sm:h-40">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={association.coverImageUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "shrink-0 self-start border px-3 py-1 text-xs font-semibold",
-              association.status === AssociationStatus.ACTIVE &&
-                "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100",
-              association.status === AssociationStatus.PENDING &&
-                "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100",
-              association.status === AssociationStatus.INACTIVE && "border-muted-foreground/40",
-              (association.status === AssociationStatus.REJECTED ||
-                association.status === AssociationStatus.SUSPENDED) &&
-                "border-destructive/35 bg-destructive/10 text-destructive"
-            )}
-          >
-            {statusLabel[association.status]}
-          </Badge>
+        ) : (
+          <div
+            className="h-2 w-full"
+            style={{ backgroundColor: appConfig.primaryColor }}
+            aria-hidden
+          />
+        )}
+
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-4">
+              {/* Logo */}
+              {association.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={association.logoUrl}
+                  alt={`Logo ${association.name}`}
+                  className={cn(
+                    "shrink-0 rounded-xl object-cover shadow-md ring-2 ring-background",
+                    association.coverImageUrl ? "-mt-10 h-16 w-16 sm:-mt-14 sm:h-20 sm:w-20" : "h-14 w-14 sm:h-16 sm:w-16"
+                  )}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center justify-center rounded-xl font-bold text-white shadow-md ring-2 ring-background",
+                    association.coverImageUrl ? "-mt-10 h-16 w-16 text-2xl sm:-mt-14 sm:h-20 sm:w-20 sm:text-3xl" : "h-14 w-14 text-xl sm:h-16 sm:w-16"
+                  )}
+                  style={{ backgroundColor: appConfig.primaryColor }}
+                  aria-hidden
+                >
+                  {association.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+
+              <div className="min-w-0 space-y-1">
+                <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{association.name}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {association.acronym ? <span className="font-medium text-foreground">{association.acronym}</span> : null}
+                  {association.acronym ? " · " : ""}
+                  Créée le{" "}
+                  {new Date(association.createdAt).toLocaleDateString("fr-FR", { dateStyle: "long" })}
+                </p>
+                {association.userId ? (
+                  <p className="text-xs text-muted-foreground">
+                    Compte lié :{" "}
+                    <span className="font-mono text-foreground">{association.user?.email ?? association.userId}</span>
+                  </p>
+                ) : (
+                  <p className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Aucun compte utilisateur lié
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <Badge
+              variant="outline"
+              className={cn(
+                "shrink-0 self-start border px-3 py-1 text-xs font-semibold",
+                association.status === AssociationStatus.ACTIVE &&
+                  "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100",
+                association.status === AssociationStatus.PENDING &&
+                  "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100",
+                association.status === AssociationStatus.INACTIVE && "border-muted-foreground/40",
+                (association.status === AssociationStatus.REJECTED ||
+                  association.status === AssociationStatus.SUSPENDED) &&
+                  "border-destructive/35 bg-destructive/10 text-destructive"
+              )}
+            >
+              {statusLabel[association.status]}
+            </Badge>
+          </div>
         </div>
       </section>
 

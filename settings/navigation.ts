@@ -119,8 +119,16 @@ export const adminNavigation: NavigationItem[] = [
 
 export const publicNavigation: PublicNavigationItem[] = [
   {
+    label: "Accueil",
+    href: "/",
+  },
+  {
     label: "A propos",
     href: "#apropos",
+  },
+  {
+    label: "Explorer",
+    href: "/associations",
   },
   {
     label: "Associations",

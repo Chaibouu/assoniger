@@ -78,3 +78,18 @@ body,
     @apply bg-background text-foreground;
   }
 }
+/* ── Partner logo slider ── */
+@keyframes logo-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.logo-slide-track {
+  display: flex;
+  width: max-content;
+  animation: logo-scroll 22s linear infinite;
+}
+
+.logo-slide-track:hover {
+  animation-play-state: paused;
+}

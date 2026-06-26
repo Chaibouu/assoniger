@@ -21,10 +21,19 @@ const appConfig = {
   contactPhone: "+227 80 00 00 00",
   contactAddress: "Niamey, Niger - Quartier Plateau",
 
-  publicRoutes: ["/"],
+  publicRoutes: ["/", "/associations"],
   defaultLoginRedirect: "/test",
-  primaryColor: "#0DB02B",      // Vert
-  secondaryColor: "#E05206", // Orange
+  primaryColor: "#035740", 
+  pprimaryColor: "#146934", 
+  secondaryColor: "#E26E12", 
+  primaryDarkColor: "#024a36",
+  secondaryDarkColor: "#d45a08",
+  primaryLightColor: "#57b58f",
+  secondaryLightColor: "#f7bc7a",
+  primaryTransparentColor: "#03574020",
+  secondaryTransparentColor: "#E26E1220",
+  primaryLightTransparentColor: "#03574010",
+  secondaryLightTransparentColor: "#E26E1210",
 
   // Ajout d'une option pour autoriser ou non les connexions multiples
   allowMultipleSessions: false, // ou false pour invalider les anciennes sessions

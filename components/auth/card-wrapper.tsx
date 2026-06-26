@@ -42,10 +42,10 @@ export const CardWrapper = ({
           backgroundColor: appConfig.primaryColor,
         }}
       />
-      <CardHeader>
+      <CardHeader className="pb-3 pt-4">
         <Header label={headerLabel} />
       </CardHeader>
-      <CardContent className="pt-1">
+      <CardContent className="pt-0">
         {children}
       </CardContent>
       {showSocial && (

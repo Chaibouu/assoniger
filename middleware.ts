@@ -3,6 +3,7 @@ import {
   apiAuthPrefix,
   authRoutes,
   publicRoutes,
+  isPublicPath,
 } from "@/routes";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -55,7 +56,7 @@ export async function middleware(req: NextRequest) {
     const isApiRoute = nextUrl.pathname.startsWith("/api");
     const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
     const isApiPublicRoute = nextUrl.pathname.startsWith("/api/public");
-    const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
+    const isPublicRoute = isPublicPath(nextUrl.pathname);
     const isAuthRoute = authRoutes.includes(nextUrl.pathname);
 
     // ─── Nonce CSP — généré pour chaque requête HTML ───────────────────────

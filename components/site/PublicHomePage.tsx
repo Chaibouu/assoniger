@@ -6,12 +6,13 @@ import { SiteContact } from "@/components/site/SiteContact";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteHero } from "@/components/site/SiteHero";
+import { SiteFeatures } from "@/components/site/SiteFeatures";
 import { SitePartners } from "@/components/site/SitePartners";
 import { SiteStats } from "@/components/site/SiteStats";
 import { SiteTestimonials } from "@/components/site/SiteTestimonials";
 
 export async function PublicHomePage() {
-  const [associations, totalAssociations, totalMembers, totalNeeds] = await Promise.all([
+  const [associations, totalAssociations, totalMembers, totalRegions] = await Promise.all([
     db.association.findMany({
       where: {
         isDeleted: false,
@@ -37,24 +38,27 @@ export async function PublicHomePage() {
     db.associationMember.count({
       where: { isDeleted: false },
     }),
-    db.associationNeed.count({
+    db.association.findMany({
       where: {
         isDeleted: false,
-        status: "OPEN",
+        status: { in: [AssociationStatus.ACTIVE, AssociationStatus.VERIFIED] },
+        regionId: { not: undefined },
       },
-    }),
+      select: { regionId: true },
+      distinct: ["regionId"],
+    }).then((rows) => rows.length),
   ]);
 
   return (
     <main className="flex min-h-screen flex-col">
       <SiteHeader />
-      <SiteHero />
+      <SiteHero totalAssociations={totalAssociations} totalMembers={totalMembers} totalRegions={totalRegions} />
       <SiteAbout />
-      <SiteStats
+      <SiteFeatures />
+      {/* <SiteStats
         totalAssociations={totalAssociations}
         totalMembers={totalMembers}
-        totalNeeds={totalNeeds}
-      />
+      /> */}
       <SiteAssociations
         associations={associations.map((a) => ({
           id: a.id,
@@ -68,9 +72,7 @@ export async function PublicHomePage() {
       <SitePartners />
       <SiteTestimonials />
       <SiteContact />
-      <div className="mt-auto">
-        <SiteFooter />
-      </div>
+      <SiteFooter />
     </main>
   );
 }

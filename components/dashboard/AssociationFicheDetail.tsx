@@ -1,7 +1,29 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AssociationStatus, LegalStatus } from "@prisma/client";
-import { Pencil, Save, X } from "lucide-react";
+import {
+  type LucideIcon,
+  Pencil,
+  Save,
+  X,
+  Building2,
+  Phone,
+  MapPin,
+  FileCheck,
+  Users,
+  Banknote,
+  Eye,
+  Globe,
+  Facebook,
+  Twitter,
+  Mail,
+  CheckCircle2,
+  XCircle,
+  ExternalLink,
+  ShieldCheck,
+  Briefcase,
+  UserCheck,
+} from "lucide-react";
 import appConfig from "@/settings";
 import { updateAssociationDashboardAction } from "@/actions/associations/update-association-dashboard";
 
@@ -30,12 +52,101 @@ const inputClass =
 const textareaClass =
   "w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+function SectionHeader({
+  icon: Icon,
+  title,
+}: {
+  icon: LucideIcon;
+  title: string;
+}) {
+  return (
+    <div className="mb-4 flex items-center gap-2.5">
+      <div
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+        style={{ backgroundColor: `${appConfig.primaryColor}18` }}
+      >
+        <Icon className="h-4 w-4" style={{ color: appConfig.primaryColor }} aria-hidden />
+      </div>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className="h-px flex-1 bg-border/50" />
+    </div>
+  );
+}
+
 function FieldBox({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
-      <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+    <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3 transition-colors hover:bg-muted/30">
+      <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-muted-foreground/80">{label}</p>
       <div className="mt-1.5 text-sm font-medium text-foreground">{children}</div>
     </div>
+  );
+}
+
+function BoolBadge({ value }: { value: boolean }) {
+  return value ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+      <CheckCircle2 className="h-3 w-3" aria-hidden />
+      Oui
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+      <XCircle className="h-3 w-3" aria-hidden />
+      Non
+    </span>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+}) {
+  return (
+    <div className="flex flex-col items-center rounded-xl border border-border/50 bg-card px-4 py-5 text-center shadow-sm">
+      <div
+        className="mb-3 flex h-10 w-10 items-center justify-center rounded-full"
+        style={{ backgroundColor: `${appConfig.primaryColor}12` }}
+      >
+        <Icon className="h-5 w-5" style={{ color: appConfig.primaryColor }} aria-hidden />
+      </div>
+      <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function DomainPill({ name }: { name: string }) {
+  return (
+    <span
+      className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium"
+      style={{
+        borderColor: `${appConfig.primaryColor}30`,
+        backgroundColor: `${appConfig.primaryColor}08`,
+        color: appConfig.primaryColor,
+      }}
+    >
+      {name}
+    </span>
+  );
+}
+
+function ExtLink({ url, label = "Lien" }: { url: string | null | undefined; label?: string }) {
+  if (!url) return <span className="text-muted-foreground">—</span>;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors hover:underline"
+      style={{ color: appConfig.primaryColor }}
+    >
+      <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      {label}
+    </a>
   );
 }
 
@@ -46,20 +157,7 @@ function fmtDate(d: Date | null | undefined): string {
 
 function fmtNum(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
-  return String(n);
-}
-
-function fmtBool(v: boolean): string {
-  return v ? "Oui" : "Non";
-}
-
-function optLink(url: string | null | undefined, label = "Lien"): ReactNode {
-  if (!url) return "—";
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="break-all text-primary underline">
-      {label}
-    </a>
-  );
+  return n.toLocaleString("fr-FR");
 }
 
 function dateInputValue(d: Date | null | undefined): string {
@@ -133,10 +231,9 @@ type AssociationFicheDetailProps = {
   communes: AssociationFicheCommune[];
   domainsCatalog: AssociationFicheDomain[];
   canFullEdit: boolean;
-  /** Afficher les notes internes (lecture) : modérateurs et + */
   showInternalAdminNotes: boolean;
-  /** Préfixe sans slash final pour liens fiche / édition (profil ou admin). */
   workspaceBasePath: string;
+  canEditAdminFields?: boolean;
 };
 
 export function AssociationFicheDetail({
@@ -173,16 +270,18 @@ export function AssociationFicheDetail({
     <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="h-1 w-full shrink-0" style={{ backgroundColor: appConfig.primaryColor }} aria-hidden />
       <div className="p-5 sm:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {/* Header */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-foreground">
-            {mode === "edit" ? "Modifier l’association" : "Détails de l’association"}
+            {mode === "edit" ? "Modifier l'association" : "Fiche détaillée"}
           </h2>
           {mode === "view" && canFullEdit ? (
             <Link
               href={`${workspaceBasePath}?mode=edit`}
-              className="inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/5 px-3 py-2 text-sm font-medium text-orange-800 transition-colors hover:bg-orange-500/10 dark:text-orange-200"
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60"
+              style={{ borderColor: `${appConfig.secondaryColor}50`, color: appConfig.secondaryColor }}
             >
-              <Pencil className="h-4 w-4" aria-hidden />
+              <Pencil className="h-3.5 w-3.5" aria-hidden />
               Modifier
             </Link>
           ) : null}
@@ -190,54 +289,120 @@ export function AssociationFicheDetail({
 
         {mode === "view" ? (
           <div className="space-y-8">
+
+            {/* ── Identité & présentation ── */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Identité & présentation
-              </h3>
+              <SectionHeader icon={Building2} title="Identité & présentation" />
+
+              {/* Logo + slogan banner si logo dispo */}
+              {association.logoUrl && (
+                <div className="mb-4 flex items-center gap-4 rounded-xl border border-border/50 bg-muted/10 p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={association.logoUrl}
+                    alt={`Logo ${association.name}`}
+                    className="h-16 w-16 rounded-xl object-cover shadow-sm ring-1 ring-border/40"
+                  />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{association.name}</p>
+                    {association.slogan && (
+                      <p className="mt-0.5 text-sm italic text-muted-foreground">"{association.slogan}"</p>
+                    )}
+                    {association.acronym && (
+                      <p className="mt-1 text-xs font-medium text-muted-foreground">{association.acronym}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <FieldBox label="Nom">{association.name}</FieldBox>
-                <FieldBox label="Sigle">{association.acronym || "—"}</FieldBox>
-                <FieldBox label="Devise / slogan">{association.slogan || "—"}</FieldBox>
-                <FieldBox label="Statut sur la plateforme">{statusLabel[association.status]}</FieldBox>
+                {!association.logoUrl && (
+                  <>
+                    <FieldBox label="Nom">{association.name}</FieldBox>
+                    <FieldBox label="Sigle">{association.acronym || "—"}</FieldBox>
+                    <FieldBox label="Devise / slogan">{association.slogan || "—"}</FieldBox>
+                  </>
+                )}
                 <FieldBox label="Statut juridique">{legalStatusFr[association.legalStatus]}</FieldBox>
-                <FieldBox label="Numéro d’enregistrement / récépissé">{association.registrationNumber || "—"}</FieldBox>
-                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 sm:col-span-2 xl:col-span-3">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                <FieldBox label="N° enregistrement">{association.registrationNumber || "—"}</FieldBox>
+                <FieldBox label="Date de création">{fmtDate(association.foundingDate)}</FieldBox>
+
+                {/* Description pleine largeur */}
+                <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3 sm:col-span-2 xl:col-span-3">
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-muted-foreground/80">
                     Description
                   </p>
                   <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground">
                     {association.description}
                   </p>
                 </div>
-                <FieldBox label="Logo">{optLink(association.logoUrl, "Voir le logo")}</FieldBox>
-                <FieldBox label="Image de couverture">{optLink(association.coverImageUrl, "Voir l’image")}</FieldBox>
-                <FieldBox label="Date de création (association)">{fmtDate(association.foundingDate)}</FieldBox>
-                <FieldBox label="Domaines d’activité">
-                  {association.domains.length === 0
-                    ? "—"
-                    : association.domains.map((d) => d.domain.name).join(", ")}
+
+                {/* Domaines d'activité en pills */}
+                <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3 sm:col-span-2 xl:col-span-3">
+                  <p className="mb-2.5 text-[0.62rem] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                    Domaines d'activité
+                  </p>
+                  {association.domains.length === 0 ? (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {association.domains.map((d) => (
+                        <DomainPill key={d.domain.id} name={d.domain.name} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <FieldBox label="Logo">
+                  <ExtLink url={association.logoUrl} label="Voir le logo" />
+                </FieldBox>
+                <FieldBox label="Image de couverture">
+                  <ExtLink url={association.coverImageUrl} label="Voir l'image" />
                 </FieldBox>
               </div>
             </div>
 
+            {/* ── Contact ── */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contact</h3>
+              <SectionHeader icon={Phone} title="Contact & réseaux" />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <FieldBox label="Email de contact">
-                  <span className="break-all font-mono text-xs">{association.contactEmail}</span>
+                  <span className="inline-flex items-center gap-1.5 break-all font-mono text-xs">
+                    <Mail className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    {association.contactEmail}
+                  </span>
                 </FieldBox>
-                <FieldBox label="Téléphone">{association.contactPhone}</FieldBox>
+                <FieldBox label="Téléphone">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Phone className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    {association.contactPhone}
+                  </span>
+                </FieldBox>
                 <FieldBox label="WhatsApp">{association.contactWhatsapp || "—"}</FieldBox>
-                <FieldBox label="Site web">{optLink(association.website, "Ouvrir")}</FieldBox>
-                <FieldBox label="Facebook">{optLink(association.facebookPage, "Page")}</FieldBox>
-                <FieldBox label="X (Twitter)">{association.twitterHandle || "—"}</FieldBox>
+                <FieldBox label="Site web">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Globe className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    <ExtLink url={association.website} label="Ouvrir" />
+                  </span>
+                </FieldBox>
+                <FieldBox label="Facebook">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Facebook className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    <ExtLink url={association.facebookPage} label="Page" />
+                  </span>
+                </FieldBox>
+                <FieldBox label="X / Twitter">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Twitter className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    {association.twitterHandle || "—"}
+                  </span>
+                </FieldBox>
               </div>
             </div>
 
+            {/* ── Localisation ── */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Localisation
-              </h3>
+              <SectionHeader icon={MapPin} title="Localisation" />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <FieldBox label="Pays">{association.country}</FieldBox>
                 <FieldBox label="Région">{association.region?.name ?? association.region?.code ?? "—"}</FieldBox>
@@ -250,79 +415,102 @@ export function AssociationFicheDetail({
                     "—"
                   )}
                 </FieldBox>
-                <FieldBox label="Latitude / Longitude">
-                  {association.latitude != null && association.longitude != null
-                    ? `${association.latitude}, ${association.longitude}`
-                    : "—"}
+                <FieldBox label="Coordonnées GPS">
+                  {association.latitude != null && association.longitude != null ? (
+                    <span className="font-mono text-xs">
+                      {association.latitude}, {association.longitude}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </FieldBox>
               </div>
             </div>
 
+            {/* ── Pièces légales ── */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Statuts & pièces légales
-              </h3>
+              <SectionHeader icon={FileCheck} title="Statuts & pièces légales" />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <FieldBox label="N° récépissé">{association.receiptNumber || "—"}</FieldBox>
-                <FieldBox label="Fichier récépissé">{optLink(association.receiptFileUrl, "Document")}</FieldBox>
+                <FieldBox label="Fichier récépissé">
+                  <ExtLink url={association.receiptFileUrl} label="Document" />
+                </FieldBox>
                 <FieldBox label="Expiration récépissé">{fmtDate(association.receiptExpiryDate)}</FieldBox>
                 <FieldBox label="NIF">{association.nif || "—"}</FieldBox>
                 <FieldBox label="NINEA">{association.ninea || "—"}</FieldBox>
-                <FieldBox label="Statuts (PDF)">{optLink(association.statutesFileUrl, "Fichier")}</FieldBox>
-                <FieldBox label="Composition du bureau (PDF)">
-                  {optLink(association.governingBoardFileUrl, "Fichier")}
+                <FieldBox label="Statuts (PDF)">
+                  <ExtLink url={association.statutesFileUrl} label="Fichier" />
                 </FieldBox>
-                <FieldBox label="Quitus fiscal">{optLink(association.taxClearanceUrl, "Fichier")}</FieldBox>
+                <FieldBox label="Composition du bureau">
+                  <ExtLink url={association.governingBoardFileUrl} label="Fichier" />
+                </FieldBox>
+                <FieldBox label="Quitus fiscal">
+                  <ExtLink url={association.taxClearanceUrl} label="Fichier" />
+                </FieldBox>
               </div>
             </div>
 
+            {/* ── Effectifs & finance ── */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Effectifs & finance
-              </h3>
+              <SectionHeader icon={Users} title="Effectifs & finance" />
+
+              {/* Stat cards */}
+              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard label="Membres" value={fmtNum(association.totalMembers)} icon={Users} />
+                <StatCard label="Bénévoles" value={fmtNum(association.totalVolunteers)} icon={UserCheck} />
+                <StatCard label="Salariés" value={fmtNum(association.totalStaff)} icon={Briefcase} />
+                <StatCard label="Budget annuel (FCFA)" value={fmtNum(association.annualBudget)} icon={Banknote} />
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <FieldBox label="Membres (total)">{fmtNum(association.totalMembers)}</FieldBox>
-                <FieldBox label="Bénévoles">{fmtNum(association.totalVolunteers)}</FieldBox>
-                <FieldBox label="Salariés">{fmtNum(association.totalStaff)}</FieldBox>
-                <FieldBox label="Budget annuel (FCFA)">{fmtNum(association.annualBudget)}</FieldBox>
-                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 sm:col-span-2">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                {/* Sources de financement */}
+                <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-3 sm:col-span-2">
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-wider text-muted-foreground/80">
                     Sources de financement
                   </p>
                   <p className="mt-2 whitespace-pre-line text-sm text-foreground">
                     {association.fundingSources || "—"}
                   </p>
                 </div>
-                <FieldBox label="Titulaire du compte bancaire">{association.bankAccountName || "—"}</FieldBox>
+                <FieldBox label="Titulaire du compte">{association.bankAccountName || "—"}</FieldBox>
                 <FieldBox label="Banque">{association.bankName || "—"}</FieldBox>
-                <FieldBox label="N° de compte">{association.bankAccountNumber || "—"}</FieldBox>
+                <FieldBox label="N° de compte">
+                  <span className="font-mono text-xs">{association.bankAccountNumber || "—"}</span>
+                </FieldBox>
               </div>
             </div>
 
+            {/* ── Visibilité & communication ── */}
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Visibilité & communication
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <FieldBox label="Accepter d’être contacté publiquement">{fmtBool(association.acceptPublicContact)}</FieldBox>
-                <FieldBox label="Accepter les dons">{fmtBool(association.acceptDonations)}</FieldBox>
-                <FieldBox label="Afficher la liste des membres">{fmtBool(association.displayMembersList)}</FieldBox>
-                <FieldBox label="Newsletter">{fmtBool(association.newsletterSubscribed)}</FieldBox>
+              <SectionHeader icon={Eye} title="Visibilité & communication" />
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <FieldBox label="Contact public">
+                  <BoolBadge value={association.acceptPublicContact} />
+                </FieldBox>
+                <FieldBox label="Accepter les dons">
+                  <BoolBadge value={association.acceptDonations} />
+                </FieldBox>
+                <FieldBox label="Liste des membres visible">
+                  <BoolBadge value={association.displayMembersList} />
+                </FieldBox>
+                <FieldBox label="Newsletter">
+                  <BoolBadge value={association.newsletterSubscribed} />
+                </FieldBox>
               </div>
             </div>
 
+            {/* ── Notes internes admin ── */}
             {showInternalAdminNotes && association.adminNotes ? (
               <div>
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Notes internes (administration)
-                </h3>
-                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
+                <SectionHeader icon={ShieldCheck} title="Notes internes (administration)" />
+                <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-950/20">
                   <p className="whitespace-pre-line text-sm text-foreground">{association.adminNotes}</p>
                 </div>
               </div>
             ) : null}
           </div>
         ) : (
+          /* ────────────── EDIT MODE ────────────── */
           <form action={updateAssociationDashboardAction} className="space-y-8">
             <input type="hidden" name="associationId" value={association.id} />
 
@@ -346,7 +534,7 @@ export function AssociationFicheDetail({
                 {canEditAdminFields ? (
                   <div className="space-y-1.5 md:col-span-2">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Numéro d’enregistrement / récépissé (unique)
+                      Numéro d'enregistrement / récépissé (unique)
                     </label>
                     <input
                       name="registrationNumber"
@@ -388,7 +576,7 @@ export function AssociationFicheDetail({
                   />
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
-                  <p className="text-xs font-medium text-muted-foreground">Domaines d’activité</p>
+                  <p className="text-xs font-medium text-muted-foreground">Domaines d'activité</p>
                   <div className="flex max-h-48 flex-col flex-wrap gap-2 overflow-y-auto rounded-md border border-input p-3">
                     {domainsCatalog.map((d) => (
                       <label key={d.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -483,7 +671,7 @@ export function AssociationFicheDetail({
                     ))}
                   </select>
                   <p className="text-[0.7rem] text-muted-foreground">
-                    La région choisie doit correspondre à la commune sélectionnée (contrôle à l’enregistrement).
+                    La région choisie doit correspondre à la commune sélectionnée (contrôle à l'enregistrement).
                   </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -542,7 +730,7 @@ export function AssociationFicheDetail({
                   <input name="receiptFileUrl" type="url" defaultValue={association.receiptFileUrl ?? ""} className={inputClass} />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Date d’expiration récépissé</label>
+                  <label className="text-xs font-medium text-muted-foreground">Date d'expiration récépissé</label>
                   <input
                     name="receiptExpiryDate"
                     type="date"
@@ -660,7 +848,7 @@ export function AssociationFicheDetail({
                     defaultChecked={association.acceptPublicContact}
                     className="h-4 w-4 rounded border-input"
                   />
-                  Accepter d’être contacté publiquement
+                  Accepter d'être contacté publiquement
                 </label>
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <input
@@ -704,10 +892,10 @@ export function AssociationFicheDetail({
               </fieldset>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 border-t border-border/40 pt-4">
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
                 style={{ backgroundColor: appConfig.primaryColor }}
               >
                 <Save className="h-4 w-4" aria-hidden />
@@ -715,7 +903,7 @@ export function AssociationFicheDetail({
               </button>
               <Link
                 href={workspaceBasePath}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted/70"
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted/70"
               >
                 <X className="h-4 w-4" aria-hidden />
                 Annuler

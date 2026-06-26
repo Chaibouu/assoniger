@@ -7,6 +7,13 @@ import appConfig from "./settings";
  */
 export const publicRoutes = [...appConfig.publicRoutes.map((route) => route)];
 
+export function isPublicPath(pathname: string): boolean {
+  return (
+    publicRoutes.includes(pathname) ||
+    pathname.startsWith("/associations")
+  );
+}
+
 /**
  * An array of routes that are used for authentication
  * These routes will redirect logged in users to /settings

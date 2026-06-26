@@ -1,9 +1,13 @@
 import { LoginForm } from "@/components/auth/login-form";
+import { SiteHeader } from "@/components/site/SiteHeader";
 
 export default function LoginPage() {
   return (
-    <div className="flex h-full min-h-0 w-full items-center justify-center overflow-y-auto px-4 py-12">
-      <LoginForm />
-    </div>
+    <>
+      <SiteHeader />
+      <div className="flex w-full items-center justify-center overflow-y-auto px-4 py-4" style={{ minHeight: "calc(100dvh - 4rem)" }}>
+        <LoginForm />
+      </div>
+    </>
   );
 }
