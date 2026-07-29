@@ -14,6 +14,22 @@ export function adminAssociationWorkspacePath(associationId: string): string {
   return `/dashboard/associations/${associationId}`;
 }
 
+export function adminMembresPath(associationId: string): string {
+  return `/dashboard/associations/${associationId}/membres`;
+}
+
+export function adminAdhesionPath(associationId: string): string {
+  return `/dashboard/associations/${associationId}/demandes-adhesion`;
+}
+
+export function adminDocumentsPath(associationId: string): string {
+  return `/dashboard/associations/${associationId}/documents`;
+}
+
+export function adminCandidatsPath(associationId: string): string {
+  return `/dashboard/associations/${associationId}/candidats`;
+}
+
 export function profileAssociationWorkspacePath(associationId: string): string {
   return `/dashboard/profile/associations/${associationId}`;
 }

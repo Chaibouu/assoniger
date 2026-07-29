@@ -44,7 +44,7 @@ export async function approvePendingAssociation(
   if (a.userId) {
     await db.user.update({
       where: { id: a.userId },
-      data: { isActive: true },
+      data: { isActive: true, emailVerified: new Date() },
     });
   }
 

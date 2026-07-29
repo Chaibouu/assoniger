@@ -93,13 +93,13 @@ export function SiteFeatures() {
                 </div>
 
                 {/* Number */}
-                <span
+                {/* <span
                   className="absolute right-5 top-5 text-5xl font-black opacity-5 transition-opacity duration-300 group-hover:opacity-10"
                   style={{ color: feature.accent }}
                   aria-hidden="true"
                 >
                   {String(i + 1).padStart(2, "0")}
-                </span>
+                </span> */}
 
                 <h3 className="mb-2 text-base font-bold text-gray-900">{feature.title}</h3>
                 <p className="text-sm leading-relaxed text-gray-500">{feature.description}</p>

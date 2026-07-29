@@ -23,7 +23,7 @@ const SETTINGS_ROLES = [
 ];
 
 /** Sections espace association (membres, adhésion, documents, candidat) */
-const ASSOCIATION_WORKSPACE_ROLES = ["ASSOCIATION", "ADMIN", "SUPER_ADMIN"];
+const ASSOCIATION_WORKSPACE_ROLES = ["ASSOCIATION"];
 
 export const adminNavigation: NavigationItem[] = [
   {
@@ -68,17 +68,17 @@ export const adminNavigation: NavigationItem[] = [
     path: "#",
     children: [
       {
-        title: "Associations",
+        title: "Toutes les associations",
         path: "/dashboard/associations",
-        allowedRoles: ["ADMIN","SUPER_ADMIN"],
+        allowedRoles: ["ADMIN", "SUPER_ADMIN"],
       },
       {
-        title: "En Attente",
+        title: "En attente",
         path: "/dashboard/associations/pending",
         allowedRoles: ["ADMIN", "SUPER_ADMIN"],
       },
     ],
-    allowedRoles: ["ADMIN","SUPER_ADMIN"],
+    allowedRoles: ["ADMIN", "SUPER_ADMIN"],
   },
   // {
   //   title: "Test",
@@ -124,7 +124,7 @@ export const publicNavigation: PublicNavigationItem[] = [
   },
   {
     label: "A propos",
-    href: "#apropos",
+    href: "/#apropos",
   },
   {
     label: "Explorer",
@@ -132,10 +132,10 @@ export const publicNavigation: PublicNavigationItem[] = [
   },
   {
     label: "Associations",
-    href: "#associations",
+    href: "/#associations",
   },
   {
     label: "Contact",
-    href: "#contact",
+    href: "/#contact",
   },
 ];

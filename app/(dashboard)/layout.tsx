@@ -9,6 +9,7 @@ import { SidebarClear } from "@/components/Sidebarr/SidebarClear/SidebarClear";
 import HeaderClear from "@/components/Sidebarr/SidebarClear/Header";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { FullPageLoader } from "@/components/loaders/PageLoader";
 
 export default function DashboardLayout({
   children,
@@ -25,11 +26,10 @@ export default function DashboardLayout({
     }
   }, [isAuthenticated, user, router]);
 
-  /* Pas de loader global ici : la session vient déjà du SSR (RootLayout + middleware).
-     Un état `isLoading: true` initial forçait un écran de chargement à *chaque* navigation. */
-
+  /* Le loader s'affiche uniquement pendant le bref instant où la session SSR
+     n'est pas encore hydratée côté client — évite un flash de contenu vide. */
   if (!isAuthenticated && !user) {
-    return null;
+    return <FullPageLoader label="Vérification de la session..." />;
   }
 
   return (

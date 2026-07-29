@@ -168,15 +168,8 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      if (!(logoFile instanceof File)) {
-        return NextResponse.json(
-          { error: "Le logo de l'association est requis" },
-          { status: 400 }
-        );
-      }
-
       const validLogoTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-      if (!validLogoTypes.includes(logoFile.type)) {
+      if (logoFile instanceof File && !validLogoTypes.includes(logoFile.type)) {
         return NextResponse.json(
           { error: "Le logo doit être une image (jpg, png, webp ou gif)" },
           { status: 400 }
@@ -292,24 +285,30 @@ export async function POST(req: NextRequest) {
         console.info("[PUBLIC_REGISTER][ASSOCIATION] Président créé");
       });
       const destination = associationRegistrationUploadRelative(createdAssociationId);
-      const [recognitionUpload, logoUpload] = await Promise.all([
+      const uploadPromises: Promise<{ path: string }>[] = [
         uploadFile(recognitionFile, {
           destination,
           allowedTypes: ["application/pdf"],
           maxSize: 10 * 1024 * 1024,
         }),
-        uploadFile(logoFile, {
-          destination,
-          allowedTypes: validLogoTypes,
-          maxSize: 10 * 1024 * 1024,
-        }),
-      ]);
+      ];
+      if (logoFile instanceof File) {
+        uploadPromises.push(
+          uploadFile(logoFile, {
+            destination,
+            allowedTypes: validLogoTypes,
+            maxSize: 10 * 1024 * 1024,
+          })
+        );
+      }
+
+      const [recognitionUpload, logoUpload] = await Promise.all(uploadPromises);
 
       await db.association.update({
         where: { id: createdAssociationId },
         data: {
           receiptFileUrl: recognitionUpload.path,
-          logoUrl: logoUpload.path,
+          ...(logoUpload ? { logoUrl: logoUpload.path } : {}),
         },
       });
 

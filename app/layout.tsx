@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import NextTopLoader from 'nextjs-toploader';
 import appConfig from "@/settings";
 import { headers } from "next/headers";
+import { PageLoader } from "@/components/loaders/PageLoader";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -41,7 +42,7 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ErrorBoundary>
-          <Suspense fallback={<div>Loading...</div>}>
+          <Suspense fallback={<PageLoader />}>
             <SessionProvider user={user?.user} isImpersonation={isImpersonation}>
             <NextTopLoader
               color={appConfig.primaryColor}

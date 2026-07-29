@@ -9,6 +9,10 @@ import { associationWorkspaceOverviewHref } from "@/lib/association-overview-hre
 import {
   redirectAssociationOwnerFromAdminFiche,
   resolveAssociationWorkspaceBasePath,
+  adminMembresPath,
+  adminAdhesionPath,
+  adminDocumentsPath,
+  adminCandidatsPath,
 } from "@/lib/association-workspace-paths";
 import { AssociationStatus, UserRole } from "@prisma/client";
 import Link from "next/link";
@@ -212,6 +216,16 @@ export default async function AssociationDetailPage({
             currentUser.id,
             association.userId
           )}
+          sectionHrefs={
+            isModerationStaff
+              ? {
+                  membres: adminMembresPath(association.id),
+                  demandes: adminAdhesionPath(association.id),
+                  documents: adminDocumentsPath(association.id),
+                  candidats: adminCandidatsPath(association.id),
+                }
+              : undefined
+          }
         />
       ) : null}
 

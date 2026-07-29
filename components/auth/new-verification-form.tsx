@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BeatLoader } from "react-spinners";
+import { ProjectFadeLoader } from "@/components/loaders/ProjectFadeLoader";
 import { useSearchParams } from "next/navigation";
 
 import { verifyUserToken } from "@/actions/verifyUserToken";
@@ -49,7 +49,7 @@ export const NewVerificationForm = () => {
     >
       <div className="flex items-center w-full justify-center">
         {isLoading && !success && !error && (
-          <BeatLoader />
+          <ProjectFadeLoader size="sm" />
         )}
         <FormSuccess message={success} />
         {!success && (

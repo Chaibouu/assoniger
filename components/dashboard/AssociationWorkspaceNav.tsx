@@ -26,18 +26,27 @@ export type AssociationWorkspaceNavCounts = {
   candidats?: number;
 };
 
+export type AssociationWorkspaceSectionHrefs = {
+  membres?: string;
+  demandes?: string;
+  documents?: string;
+  candidats?: string;
+};
+
 export function AssociationWorkspaceNav({
   associationId,
   active,
   ficheHref,
   overviewHref,
   counts,
+  sectionHrefs,
 }: {
   associationId: string;
   active: AssociationWorkspaceTabId;
   ficheHref: string;
   overviewHref?: string;
   counts?: AssociationWorkspaceNavCounts;
+  sectionHrefs?: AssociationWorkspaceSectionHrefs;
 }) {
   const tabs: {
     id: AssociationWorkspaceTabId;
@@ -58,10 +67,10 @@ export function AssociationWorkspaceNav({
 
   for (const t of [
     { id: "fiche" as const, label: "Fiche & infos", href: ficheHref },
-    { id: "membres" as const, label: "Membres & bureau", href: membresAssociationPath(associationId) },
-    { id: "demandes" as const, label: "Demandes d’adhésion", href: adhesionAssociationPath(associationId) },
-    { id: "documents" as const, label: "Documents", href: documentsAssociationPath(associationId) },
-    { id: "candidats" as const, label: "Candidat", href: candidatAssociationPath(associationId) },
+    { id: "membres" as const, label: "Membres & bureau", href: sectionHrefs?.membres ?? membresAssociationPath(associationId) },
+    { id: "demandes" as const, label: "Demandes d’adhésion", href: sectionHrefs?.demandes ?? adhesionAssociationPath(associationId) },
+    { id: "documents" as const, label: "Documents", href: sectionHrefs?.documents ?? documentsAssociationPath(associationId) },
+    { id: "candidats" as const, label: "Candidat", href: sectionHrefs?.candidats ?? candidatAssociationPath(associationId) },
   ]) {
     tabs.push({
       id: t.id,

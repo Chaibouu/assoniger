@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Menu, X, ChevronRight } from "lucide-react";
 import { LoginButton } from "@/components/auth/login-button";
 import { Button } from "@/components/ui/button";
@@ -13,22 +14,39 @@ import { publicNavigation } from "@/settings/navigation";
 
 export function SiteHeader() {
   const { isAuthenticated } = useSession();
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Sur la page signup, le header est toujours en blanc (le banner est déjà vert)
+  const forceWhite = pathname === "/auth/signup" || pathname === "/auth/login";
+  const isWhite = forceWhite || scrolled;
+
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    const onScroll = (e?: Event) => {
+      const target = e?.target as HTMLElement | null;
+      const scrollY = target ? target.scrollTop : window.scrollY;
+      setScrolled(scrollY > 8);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    // Écoute aussi le scroll interne de la page signup
+    const inner =
+      document.getElementById("signup-scroll") ??
+      document.getElementById("login-scroll");
+    inner?.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      inner?.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   return (
     <header
       className="sticky top-0 z-50 w-full transition-all duration-300"
       style={{
-        backgroundColor: scrolled ? "#ffffff" : appConfig.primaryColor,
-        boxShadow: scrolled ? "0 2px 16px rgba(0,0,0,0.08)" : "none",
-        borderBottom: scrolled ? "1px solid #e5e7eb" : "none",
+        backgroundColor: isWhite ? "#ffffff" : appConfig.primaryColor,
+        boxShadow: isWhite ? "0 2px 16px rgba(0,0,0,0.08)" : "none",
+        borderBottom: isWhite ? "1px solid #e5e7eb" : "none",
       }}
     >
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-8">
@@ -40,19 +58,19 @@ export function SiteHeader() {
             alt={appConfig.appName}
             width={36}
             height={36}
-            className={`shrink-0 transition-all duration-300 ${scrolled ? "" : "brightness-0 invert"}`}
+            className={`shrink-0 transition-all duration-300 ${isWhite ? "" : "brightness-0 invert"}`}
             priority
           />
           <div className="flex flex-col leading-none">
             <span
               className="text-sm font-bold tracking-tight transition-colors duration-300"
-              style={{ color: scrolled ? appConfig.primaryColor : "#ffffff" }}
+              style={{ color: isWhite ? appConfig.primaryColor : "#ffffff" }}
             >
               {appConfig.appName}
             </span>
             <span
               className="text-[10px] font-medium tracking-wide hidden sm:block transition-colors duration-300"
-              style={{ color: scrolled ? "#6b7280" : "rgba(255,255,255,0.70)" }}
+              style={{ color: isWhite ? "#6b7280" : "rgba(255,255,255,0.70)" }}
             >
               Plateforme nationale
             </span>
@@ -66,14 +84,14 @@ export function SiteHeader() {
               key={item.href}
               href={item.href}
               className="relative px-4 py-2 text-sm font-medium transition-colors duration-150 cursor-pointer"
-              style={{ color: scrolled ? "#374151" : "rgba(255,255,255,0.85)" }}
+              style={{ color: isWhite ? "#374151" : "rgba(255,255,255,0.85)" }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLAnchorElement).style.color = appConfig.secondaryColor;
                 const line = (e.currentTarget as HTMLAnchorElement).querySelector("span") as HTMLSpanElement;
                 if (line) line.style.width = "100%";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLAnchorElement).style.color = scrolled ? "#374151" : "rgba(255,255,255,0.85)";
+                (e.currentTarget as HTMLAnchorElement).style.color = isWhite ? "#374151" : "rgba(255,255,255,0.85)";
                 const line = (e.currentTarget as HTMLAnchorElement).querySelector("span") as HTMLSpanElement;
                 if (line) line.style.width = "0%";
               }}
@@ -100,7 +118,7 @@ export function SiteHeader() {
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {isAuthenticated ? (
-            <DropdownUser scrolled={scrolled} />
+            <DropdownUser scrolled={isWhite} />
           ) : (
             <>
               <Button
@@ -108,14 +126,14 @@ export function SiteHeader() {
                 variant="ghost"
                 size="sm"
                 className="hidden sm:flex h-9 px-4 text-sm font-medium cursor-pointer transition-all duration-150 hover:text-white"
-                style={{ color: scrolled ? "#374151" : "rgba(255,255,255,0.85)" }}
+                style={{ color: isWhite ? "#374151" : "rgba(255,255,255,0.85)" }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.backgroundColor = appConfig.secondaryColor;
                   (e.currentTarget as HTMLElement).style.color = "#ffffff";
                 }}
                 onMouseLeave={(e) => {
                   (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
-                  (e.currentTarget as HTMLElement).style.color = scrolled ? "#374151" : "rgba(255,255,255,0.85)";
+                  (e.currentTarget as HTMLElement).style.color = isWhite ? "#374151" : "rgba(255,255,255,0.85)";
                 }}
               >
                 <Link href="/auth/signup">S&apos;inscrire</Link>
@@ -125,7 +143,7 @@ export function SiteHeader() {
                   size="sm"
                   className="h-9 cursor-pointer gap-1.5 px-4 text-sm font-semibold shadow-sm transition-all duration-150"
                   style={
-                    scrolled
+                    isWhite
                       ? { backgroundColor: appConfig.primaryColor, color: "#ffffff" }
                       : { backgroundColor: "#ffffff", color: appConfig.primaryColor }
                   }
@@ -134,8 +152,8 @@ export function SiteHeader() {
                     (e.currentTarget as HTMLElement).style.color = "#ffffff";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = scrolled ? appConfig.primaryColor : "#ffffff";
-                    (e.currentTarget as HTMLElement).style.color = scrolled ? "#ffffff" : appConfig.primaryColor;
+                    (e.currentTarget as HTMLElement).style.backgroundColor = isWhite ? appConfig.primaryColor : "#ffffff";
+                    (e.currentTarget as HTMLElement).style.color = isWhite ? "#ffffff" : appConfig.primaryColor;
                   }}
                 >
                   Se connecter
@@ -148,8 +166,8 @@ export function SiteHeader() {
           <button
             className="flex h-9 w-9 items-center justify-center rounded-lg border transition-colors duration-150 cursor-pointer md:hidden"
             style={{
-              borderColor: scrolled ? "#e5e7eb" : "rgba(255,255,255,0.30)",
-              color: scrolled ? "#374151" : "#ffffff",
+              borderColor: isWhite ? "#e5e7eb" : "rgba(255,255,255,0.30)",
+              color: isWhite ? "#374151" : "#ffffff",
             }}
             onClick={() => setMobileOpen((v) => !v)}
             aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
@@ -165,8 +183,8 @@ export function SiteHeader() {
         <div
           className="border-t px-4 pb-4 pt-3 md:hidden"
           style={{
-            backgroundColor: scrolled ? "#ffffff" : appConfig.primaryColor,
-            borderColor: scrolled ? "#e5e7eb" : "rgba(255,255,255,0.20)",
+            backgroundColor: isWhite ? "#ffffff" : appConfig.primaryColor,
+            borderColor: isWhite ? "#e5e7eb" : "rgba(255,255,255,0.20)",
           }}
         >
           <nav className="flex flex-col gap-1" aria-label="Menu mobile">
@@ -175,7 +193,7 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 className="rounded-lg px-4 py-3 text-sm font-medium cursor-pointer transition-colors duration-150"
-                style={{ color: scrolled ? "#374151" : "rgba(255,255,255,0.85)" }}
+                style={{ color: isWhite ? "#374151" : "rgba(255,255,255,0.85)" }}
                 onClick={() => setMobileOpen(false)}
               >
                 {item.label}
@@ -183,12 +201,12 @@ export function SiteHeader() {
             ))}
             <div
               className="mt-2 flex flex-col gap-2 border-t pt-3"
-              style={{ borderColor: scrolled ? "#e5e7eb" : "rgba(255,255,255,0.20)" }}
+              style={{ borderColor: isWhite ? "#e5e7eb" : "rgba(255,255,255,0.20)" }}
             >
               <Link
                 href="/auth/signup"
                 className="rounded-lg px-4 py-3 text-sm font-medium cursor-pointer"
-                style={{ color: scrolled ? "#374151" : "rgba(255,255,255,0.85)" }}
+                style={{ color: isWhite ? "#374151" : "rgba(255,255,255,0.85)" }}
                 onClick={() => setMobileOpen(false)}
               >
                 S&apos;inscrire
@@ -197,7 +215,7 @@ export function SiteHeader() {
                 <button
                   className="flex w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-semibold cursor-pointer"
                   style={
-                    scrolled
+                    isWhite
                       ? { backgroundColor: appConfig.primaryColor, color: "#ffffff" }
                       : { backgroundColor: "#ffffff", color: appConfig.primaryColor }
                   }

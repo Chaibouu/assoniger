@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BeatLoader } from "react-spinners";
+import { ProjectFadeLoader } from "@/components/loaders/ProjectFadeLoader";
 import { useSearchParams } from "next/navigation";
 import { CardWrapper } from "@/components/auth/card-wrapper";
 import { FormError } from "@/components/form-error";
@@ -48,7 +48,7 @@ export const EmailVerificationForm = () => {
     >
       <div className="flex items-center w-full justify-center">
         {isLoading && !success && !error && (
-          <BeatLoader />
+          <ProjectFadeLoader size="sm" />
         )}
         <FormSuccess message={success} />
         {!success && (

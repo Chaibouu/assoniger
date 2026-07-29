@@ -44,7 +44,7 @@ export function SiteFooter() {
           </div>
 
           {/* Navigation */}
-          <div>
+          {/* <div>
             <p className="mb-5 text-xs font-bold uppercase tracking-widest text-white/50">
               Navigation
             </p>
@@ -60,7 +60,7 @@ export function SiteFooter() {
                 </li>
               ))}
             </ul>
-          </div>
+          </div> */}
 
           {/* Contact */}
           <div>

@@ -16,7 +16,7 @@ const AuthLayout = ({ children }: { children: React.ReactNode }) => {
         className="pointer-events-none absolute -right-20 -bottom-24 h-80 w-80 rounded-full blur-3xl"
         style={{ backgroundColor: `${appConfig.secondaryColor}22` }}
       />
-      <div className="relative z-10 h-full w-full">{children}</div>
+      <div className="relative z-10 flex h-full w-full flex-col">{children}</div>
     </div>
   );
 };

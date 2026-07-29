@@ -64,7 +64,7 @@ async function seedGeoReferential() {
 const admins = [
   {
     name: "Admin User",
-    email: "admin@gmail.com",
+    email: "admin@example.com",
     role: UserRole.ADMIN,
     emailVerified: new Date(),
   },
@@ -80,7 +80,7 @@ async function main() {
     });
 
     if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash("admin", 10);
+      const hashedPassword = await bcrypt.hash("CHANGE_ME", 10);
       await prisma.user.create({
         data: {
           name: admin.name,

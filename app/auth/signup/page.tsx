@@ -13,7 +13,7 @@ export default async function SignupPage() {
   return (
     <div className="flex h-full flex-col">
       <SiteHeader />
-      <div className="min-h-0 flex-1">
+      <div id="signup-scroll" className="flex-1 overflow-y-auto">
         <RegisterForm initialRegions={initialRegions} />
       </div>
     </div>
