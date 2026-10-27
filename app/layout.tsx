@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import NextTopLoader from 'nextjs-toploader';
 import appConfig from "@/settings";
 import { headers } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { PageLoader } from "@/components/loaders/PageLoader";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -32,6 +33,8 @@ export default async function RootLayout({
     user = result?.user;
     isImpersonation = result?.isImpersonation ?? false;
   } catch (error) {
+    // Signaux internes de Next (rendu dynamique, redirection…) : à laisser remonter, pas des erreurs
+    unstable_rethrow(error);
     console.error("Erreur lors de la récupération de l'utilisateur:", error);
   }
 
