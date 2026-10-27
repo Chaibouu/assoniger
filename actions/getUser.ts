@@ -1,72 +1,25 @@
 "use server";
 
-import { getUserInfo, refreshUserToken } from "@/lib/user";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cache } from "react";
+import { resolveSessionUser } from "@/lib/session";
+import { SESSION_HEADER, decodeSessionHeader } from "@/lib/session-header";
 
-export const getUser = cache(async () => {
-  try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get("accessToken")?.value;
-    const refreshToken = cookieStore.get("refreshToken")?.value;
-    const impersonationToken = cookieStore.get("impersonationToken")?.value;
+type ResolvedSession = Awaited<ReturnType<typeof resolveSessionUser>>;
 
-    // ─── Impersonation active ─────────────────────────────────────────────────
-    // Si un token d'impersonation est présent, on l'utilise en priorité.
-    // La session admin normale reste intacte dans "accessToken".
-    if (impersonationToken) {
-      try {
-        const userData = await getUserInfo(impersonationToken);
-        if (!userData.error) {
-          return {
-            user: userData,
-            isImpersonation: true,
-          };
-        }
-        // Token expiré ou invalide → on laisse passer (la bannière disparaîtra)
-      } catch (error) {
-        console.error("Erreur vérification token d'impersonation:", error);
-      }
-    }
+/**
+ * Identité de la requête courante (Server Components, Server Actions). Voir `resolveSessionUser`.
+ * Le middleware a déjà résolu la session pour cette requête : on réutilise son résultat (signé)
+ * plutôt que de réinterroger la base ; repli sur les cookies s'il est absent ou invalide.
+ */
+export const getUser = cache(async (): Promise<ResolvedSession> => {
+  const fromMiddleware = decodeSessionHeader<ResolvedSession>((await headers()).get(SESSION_HEADER));
+  if (fromMiddleware) return fromMiddleware;
 
-    // ─── Session normale ──────────────────────────────────────────────────────
-    if (!refreshToken) {
-      return { error: "Token de rafraîchissement manquant" };
-    }
-
-    if (accessToken) {
-      try {
-        const userData = await getUserInfo(accessToken);
-        if (!userData.error) {
-          return { user: userData };
-        } else {
-          return { error: userData.error };
-        }
-      } catch (error) {
-        console.error("Erreur lors de la vérification du token d'accès:", error);
-      }
-    }
-
-    // Rafraîchir si access token absent ou invalide
-    try {
-      const { accessToken: newAccessToken, accessTokenExpiresAt } =
-        await refreshUserToken(refreshToken);
-
-      const userData = await getUserInfo(newAccessToken);
-      if (!userData.error) {
-        return {
-          user: userData,
-          tokenInfo: { accessToken: newAccessToken, expiresAt: accessTokenExpiresAt },
-        };
-      } else {
-        return { error: userData.error };
-      }
-    } catch (error) {
-      console.error("Erreur lors du rafraîchissement du token:", error);
-      return { error: "Erreur lors du rafraîchissement" };
-    }
-  } catch (error) {
-    console.error("Erreur générale dans getUser:", error);
-    return { error: "Erreur serveur" };
-  }
+  const cookieStore = await cookies();
+  return resolveSessionUser({
+    accessToken: cookieStore.get("accessToken")?.value,
+    refreshToken: cookieStore.get("refreshToken")?.value,
+    impersonationToken: cookieStore.get("impersonationToken")?.value,
+  });
 });

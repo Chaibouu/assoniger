@@ -1,3 +1,6 @@
+// SMTP : variables EMAIL_SERVER_* (anciens noms MAIL_* encore acceptés)
+const mailPort = Number(process.env.EMAIL_SERVER_PORT ?? process.env.MAIL_PORT ?? 465);
+
 const appConfig = {
   appName: "AssoNiger",
   websiteTitle: "Plateforme des Associations du Niger",
@@ -7,12 +10,13 @@ const appConfig = {
   sidebarClearlogoUrl: "/sahel_coders_logo.png",
   adminSidebarColor: "#1C2434",
   mailOptions: {
-    host: process.env.MAIL_HOST,
-    port: process.env.MAIL_PORT,
-    secure: true,
+    host: process.env.EMAIL_SERVER_HOST ?? process.env.MAIL_HOST,
+    port: mailPort,
+    // TLS direct sur 465 ; STARTTLS sur 587 / 25
+    secure: mailPort === 465,
     auth: {
-      user: process.env.MAIL_AUTH_USER,
-      pass: process.env.MAIL_AUTH_PASSWORD,
+      user: process.env.EMAIL_SERVER_USER ?? process.env.MAIL_AUTH_USER,
+      pass: process.env.EMAIL_SERVER_PASSWORD ?? process.env.MAIL_AUTH_PASSWORD,
     },
   },
 
@@ -22,7 +26,7 @@ const appConfig = {
   contactAddress: "Niamey, Niger - Quartier Plateau",
 
   publicRoutes: ["/", "/associations"],
-  defaultLoginRedirect: "/test",
+  defaultLoginRedirect: "/dashboard",
   primaryColor: "#035740", 
   pprimaryColor: "#146934", 
   secondaryColor: "#E26E12", 
@@ -54,6 +58,12 @@ const appConfig = {
   rateLimitEmail: {
     windowMs: 60 * 60 * 1000, // Fenêtre de 1 heure
     max: 5, // 5 emails max par IP par heure (anti email-bombing)
+  },
+
+  // Codes 2FA : par compte (Redis), indépendamment de l'IP
+  rateLimit2fa: {
+    windowMs: 15 * 60 * 1000, // Fenêtre de 15 minutes
+    max: 5, // 5 codes max par compte
   },
 
   // Configuration du Backoff progressif

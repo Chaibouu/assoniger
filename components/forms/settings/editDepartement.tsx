@@ -43,7 +43,7 @@ function RegionSelectInner({
   isPending,
   regionsLength,
 }: {
-  field: ControllerRenderProps<AddDepartementValues, "regionId">["field"];
+  field: ControllerRenderProps<AddDepartementValues, "regionId">;
   regionOptions: GeoSelectOption[];
   selectClassNames: ReturnType<typeof geoReactSelectClassNames>;
   regionIdError: boolean;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
-import { getFullTokenPayload, createEncryptedJWT } from "@/lib/tokens";
+import { verifyAccessToken, createEncryptedJWT } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import type { NextRequest } from "next/server";
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const adminPayload = getFullTokenPayload(adminToken);
+    const adminPayload = await verifyAccessToken(adminToken);
     if (!adminPayload?.userId) {
       return NextResponse.json(
         { error: "Token administrateur invalide ou expiré" },
@@ -31,9 +31,9 @@ export async function POST(req: NextRequest) {
 
     // ─── 2. Vérifier le rôle ADMIN ────────────────────────────────────────────
     const admin = await getUserById(adminPayload.userId);
-    if (!admin || admin.role !== "ADMIN") {
+    if (!admin || (admin.role !== "ADMIN" && admin.role !== "SUPER_ADMIN")) {
       return NextResponse.json(
-        { error: "Accès refusé — rôle ADMIN requis" },
+        { error: "Accès refusé — rôle administrateur requis" },
         { status: 403 }
       );
     }
@@ -62,8 +62,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Bloquer l'impersonation des autres ADMIN
-    if (targetUser.role === "ADMIN") {
+    // Bloquer l'impersonation des comptes administrateurs (ADMIN et SUPER_ADMIN)
+    if (targetUser.role === "ADMIN" || targetUser.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { error: "Impossible d'impersonner un compte administrateur" },
         { status: 403 }
@@ -79,8 +79,10 @@ export async function POST(req: NextRequest) {
 
     // ─── 4. Créer le JWT d'impersonation ─────────────────────────────────────
     // Le payload inclut les métadonnées d'impersonation pour un accès sans DB
+    const sessionId = crypto.randomUUID();
     const impersonationJWT = createEncryptedJWT(
       {
+        sid: sessionId,
         userId: targetUser.id,
         email: targetUser.email,
         isImpersonation: true,
@@ -99,6 +101,7 @@ export async function POST(req: NextRequest) {
 
     await db.session.create({
       data: {
+        id: sessionId,
         userId: targetUser.id,
         sessionToken: impersonationJWT,
         refreshToken: hashedFakeRefresh,

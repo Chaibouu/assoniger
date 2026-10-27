@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { generatePasswordResetToken } from "@/lib/tokens";
 import { getUserByEmail } from "@/data/user";
 import { sendPasswordResetEmail } from "@/lib/mail";
 import { PasswordResetSchema } from "@/schemas";
+import { rateLimitRedisEmailTarget } from "@/lib/rateLimit";
 
-export async function POST(req: Request) {
+// Réponse identique que le compte existe ou non (pas d'énumération des comptes)
+const GENERIC_MESSAGE =
+  "Si un compte existe pour cette adresse, un email de réinitialisation a été envoyé.";
+
+export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
 
@@ -26,25 +32,25 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // Anti email-bombing par adresse destinataire. Pas de limite par IP ici : la route est
+    // appelée par une Server Action, donc depuis le serveur (même IP pour tous les utilisateurs).
+    const rlResponse = await rateLimitRedisEmailTarget(parsedData.data.email);
+    if (rlResponse) return rlResponse;
+
     // Recherche de l'utilisateur par email
-    const user = await getUserByEmail(email);
-    if (!user) {
-      return NextResponse.json(
-        { error: "Utilisateur non trouvé" },
-        { status: 404 }
-      );
+    const user = await getUserByEmail(parsedData.data.email);
+
+    // Envoi uniquement pour un compte existant et non désactivé par l'administrateur
+    if (user && (user.isActive || !user.emailVerified)) {
+      // Générer un token de réinitialisation sécurisé
+      const resetToken = await generatePasswordResetToken(user.email as string);
+
+      // Envoyer un email avec le lien de réinitialisation de mot de passe
+      await sendPasswordResetEmail(user.email as string, resetToken);
     }
 
-    // Générer un token de réinitialisation sécurisé
-    const resetToken = await generatePasswordResetToken(user.email as string);
-
-    // Envoyer un email avec le lien de réinitialisation de mot de passe
-    await sendPasswordResetEmail(user.email as string, resetToken);
-
-    return NextResponse.json(
-      { message: "Email de réinitialisation envoyé" },
-      { status: 200 }
-    );
+    return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
   } catch (error) {
     console.error(
       "Erreur lors de la réinitialisation du mot de passe :",

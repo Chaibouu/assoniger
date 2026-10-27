@@ -1,5 +1,8 @@
 "use server";
 
+import { callRoute } from "@/lib/internal-route";
+import { POST as confirmEmailChangeRoute } from "@/app/api/auth/change-email/confirm/route";
+
 export async function verifyEmail(token: string) {
   try {
     // Vérifier si le token est présent
@@ -7,26 +10,19 @@ export async function verifyEmail(token: string) {
       return { error: "Le token est manquant" };
     }
 
-    // Envoyer une requête à /api/auth/verify avec le token
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/change-email/confirm`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      }
+    // Appel direct de la route de confirmation du changement d'email
+    const { ok, data } = await callRoute<{ error?: string; message?: string }>(
+      confirmEmailChangeRoute,
+      "/api/auth/change-email/confirm",
+      { body: { token } }
     );
 
-    // Vérifier si la requête a réussi
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { error: errorData.error };
+    if (!ok) {
+      return { error: data.error };
     }
 
-    const responseData = await response.json();
-
-    // Si le compte a été vérifié avec succès
-    return { success: responseData.message };
+    // Si l'adresse a été mise à jour avec succès
+    return { success: data.message };
   } catch (error) {
     console.error("Erreur lors de la vérification du token :", error);
     return { error: "Erreur serveur. Veuillez réessayer plus tard." };

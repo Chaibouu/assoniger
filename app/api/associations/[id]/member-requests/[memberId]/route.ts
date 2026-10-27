@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { UserRole } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { logAdminHistory } from "@/lib/admin-history";
 import { ASSOCIATION_MEMBER_SIMPLE_POSITION } from "@/lib/association-member-kind";
@@ -21,7 +22,7 @@ async function getAuthenticatedUser(req: NextRequest) {
     };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),
@@ -111,8 +112,9 @@ export async function PATCH(
         });
 
         if (member.email) {
+          // Uniquement le compte membre créé par la demande d'adhésion (jamais un autre rôle)
           await tx.user.updateMany({
-            where: { email: member.email },
+            where: { email: member.email, role: UserRole.MEMBER, isDeleted: false },
             data: { isActive: true },
           });
         }

@@ -68,3 +68,17 @@ export async function checkPasswordPwned(password: string): Promise<HibpResult> 
     return { pwned: false, count: 0 };
   }
 }
+
+/**
+ * Message d'erreur à renvoyer si le mot de passe figure dans une fuite connue, sinon null.
+ * Respecte SKIP_HIBP_CHECK=true (hors production uniquement).
+ */
+export async function getPwnedPasswordError(password: string): Promise<string | null> {
+  const skip =
+    process.env.NODE_ENV !== "production" && process.env.SKIP_HIBP_CHECK === "true";
+  if (skip) return null;
+
+  const { pwned, count } = await checkPasswordPwned(password);
+  if (!pwned) return null;
+  return `Ce mot de passe a été compromis dans ${count.toLocaleString("fr-FR")} fuite${count > 1 ? "s" : ""} de données. Choisissez un mot de passe différent.`;
+}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 
 async function getAuthenticatedUser(req: NextRequest) {
@@ -14,7 +14,7 @@ async function getAuthenticatedUser(req: NextRequest) {
     };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),

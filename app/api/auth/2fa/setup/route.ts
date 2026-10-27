@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { authenticator } from "otplib";
 import QRCode from "qrcode";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { headers } from "next/headers";
 import appConfig from "@/settings";
@@ -27,9 +27,16 @@ export async function GET() {
       return NextResponse.json({ error: "Authentification requise" }, { status: 401 });
     }
 
-    const payload = getFullTokenPayload(token);
+    const payload = await verifyAccessToken(token);
     if (!payload?.userId) {
       return NextResponse.json({ error: "Token invalide" }, { status: 401 });
+    }
+
+    if (payload.isImpersonation) {
+      return NextResponse.json(
+        { error: "Action impossible pendant une session d'audit" },
+        { status: 403 }
+      );
     }
 
     const user = await getUserById(payload.userId);

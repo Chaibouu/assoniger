@@ -209,36 +209,83 @@ export const verifyEncryptedJWT = (encryptedToken: string): JwtPayload | string 
   return verify(decryptedToken, publicKey, { algorithms: ["RS256"] });
 };
 
-/** Extrait l'userId depuis un JWT chiffré. Retourne null si invalide. */
+/** Extrait l'userId depuis un JWT d'accès chiffré. Retourne null si invalide ou révoqué. */
 export async function getUserIdFromToken(token: string): Promise<string | null> {
-  try {
-    const decoded = verifyEncryptedJWT(token);
-    if (typeof decoded === "object" && (decoded as JwtPayload).userId) {
-      return (decoded as JwtPayload).userId as string;
-    }
-    return null;
-  } catch (error) {
-    console.error("Erreur lors de la vérification du token :", error);
-    return null;
-  }
+  return (await verifyAccessToken(token))?.userId ?? null;
 }
 
 export interface TokenPayload extends JwtPayload {
   userId: string;
+  /** Id de la session en base : permet la révocation (déconnexion, désactivation du compte). */
+  sid?: string;
   email?: string;
   isImpersonation?: boolean;
   impersonatedBy?: string;
+  /** Présent uniquement sur les tokens à usage restreint (ex. "2fa_challenge"). */
+  purpose?: string;
 }
 
 /**
- * Déchiffre et vérifie un JWT chiffré, retourne le payload complet.
- * Utilisé pour lire les métadonnées d'impersonation.
+ * Déchiffre et vérifie un JWT d'accès (session ou impersonation), retourne le payload complet.
+ * Les tokens à usage restreint (champ `purpose`, ex. challenge 2FA) sont refusés :
+ * ils ne doivent jamais donner accès aux routes protégées.
  */
 export function getFullTokenPayload(token: string): TokenPayload | null {
   try {
     const decoded = verifyEncryptedJWT(token);
     if (typeof decoded === "object" && (decoded as JwtPayload).userId) {
-      return decoded as TokenPayload;
+      const payload = decoded as TokenPayload;
+      if (payload.purpose !== undefined) return null;
+      return payload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Vérifie un JWT d'accès ET son état en base :
+ * - la session référencée par `sid` existe toujours et n'est pas expirée ;
+ * - le compte est actif et non supprimé.
+ * À utiliser pour toute authentification de requête (la vérification cryptographique seule
+ * ne permet pas de révoquer un token avant son expiration).
+ */
+export async function verifyAccessToken(token: string): Promise<TokenPayload | null> {
+  const payload = getFullTokenPayload(token);
+  if (!payload?.sid) return null;
+
+  try {
+    const session = await db.session.findFirst({
+      where: {
+        id: payload.sid,
+        userId: payload.userId,
+        isDeleted: false,
+        refreshTokenExpires: { gt: new Date() },
+        user: { isActive: true, isDeleted: false },
+      },
+      select: { id: true },
+    });
+    return session ? payload : null;
+  } catch (error) {
+    console.error("Erreur lors de la vérification de la session :", error);
+    return null;
+  }
+}
+
+/**
+ * Déchiffre et vérifie un token à usage restreint.
+ * Retourne null si le token est invalide ou si son `purpose` ne correspond pas.
+ */
+export function getPurposeTokenPayload(
+  token: string,
+  purpose: string
+): TokenPayload | null {
+  try {
+    const decoded = verifyEncryptedJWT(token);
+    if (typeof decoded === "object" && (decoded as JwtPayload).userId) {
+      const payload = decoded as TokenPayload;
+      return payload.purpose === purpose ? payload : null;
     }
     return null;
   } catch {

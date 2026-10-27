@@ -35,5 +35,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-#prisma
-/prisma/migrations/
+
+# Fichiers des utilisateurs : stockés sur Cloudflare R2 (voir npm run storage:migrate)
+/uploads/

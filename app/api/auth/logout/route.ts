@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyEncryptedJWT } from "@/lib/tokens"; // Utiliser la fonction pour déchiffrer le JWT
+import { getFullTokenPayload } from "@/lib/tokens";
 
 export async function POST(req: Request) {
   try {
@@ -15,8 +15,8 @@ export async function POST(req: Request) {
     }
 
     // Décrypter et vérifier le token
-    const decryptedToken = verifyEncryptedJWT(token);
-    if (!decryptedToken) {
+    const payload = getFullTokenPayload(token);
+    if (!payload) {
       return NextResponse.json(
         { error: "Token d'accès invalide ou non décryptable" },
         { status: 400 }
@@ -24,7 +24,17 @@ export async function POST(req: Request) {
     }
 
     // Extraire l'ID utilisateur du token décrypté
-    const { userId } = decryptedToken as { userId: string };
+    const { userId } = payload;
+
+    // Session d'audit : ne fermer que celle-ci (jamais les sessions du compte impersonné)
+    if (payload.isImpersonation) {
+      await db.session.deleteMany({
+        where: payload.sid
+          ? { id: payload.sid, isImpersonation: true }
+          : { sessionToken: token, isImpersonation: true },
+      });
+      return NextResponse.json({ message: "Déconnexion réussie" }, { status: 200 });
+    }
 
     // Rechercher et supprimer toutes les sessions pour cet utilisateur
     await db.session.deleteMany({

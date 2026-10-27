@@ -1,6 +1,9 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { callRoute } from "@/lib/internal-route";
+import { POST as startImpersonationRoute } from "@/app/api/admin/impersonate/route";
+import { DELETE as endImpersonationRoute } from "@/app/api/admin/impersonate/end/route";
 
 // ─── Démarrer une session d'impersonation ─────────────────────────────────────
 
@@ -12,21 +15,16 @@ export async function startImpersonation(targetUserId: string) {
     return { error: "Non authentifié" };
   }
 
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/admin/impersonate`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ targetUserId }),
-    }
-  );
+  const { ok, data: result } = await callRoute<{
+    error?: string;
+    impersonationToken: string;
+    targetUser: unknown;
+  }>(startImpersonationRoute, "/api/admin/impersonate", {
+    body: { targetUserId },
+    bearer: accessToken,
+  });
 
-  const result = await response.json();
-
-  if (!response.ok) {
+  if (!ok) {
     return { error: result.error ?? "Impossible de démarrer l'audit" };
   }
 
@@ -61,9 +59,9 @@ export async function endImpersonation() {
   }
 
   // Supprimer la session en base de données
-  await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/impersonate/end`, {
+  await callRoute(endImpersonationRoute, "/api/admin/impersonate/end", {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${impersonationToken}` },
+    bearer: impersonationToken,
   });
 
   // Supprimer le cookie côté serveur

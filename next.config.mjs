@@ -7,6 +7,15 @@ const nextConfig = {
      */
     serverExternalPackages: ["pino", "pino-pretty", "thread-stream", "pdf-parse", "tesseract.js"],
 
+    /**
+     * Modèle OCR français lu en local par lib/arrete-pdf-validate.ts (pas de téléchargement au
+     * premier appel) : à embarquer dans les fonctions serverless qui vérifient les arrêtés.
+     */
+    outputFileTracingIncludes: {
+        "/api/public/validate-arrete-pdf": ["./tessdata/fra.traineddata"],
+        "/api/public/register": ["./tessdata/fra.traineddata"],
+    },
+
     // Optimisations pour Next.js 15
     experimental: {
         // Amélioration des performances

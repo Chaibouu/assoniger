@@ -11,12 +11,9 @@ export async function GET(req: NextRequest) {
     const associations = await db.association.findMany({
       where: {
         isDeleted: false,
+        // Mêmes statuts que ceux acceptés pour une demande d'adhésion (register)
         status: {
-          in: [
-            AssociationStatus.PENDING,
-            AssociationStatus.ACTIVE,
-            AssociationStatus.VERIFIED,
-          ],
+          in: [AssociationStatus.ACTIVE, AssociationStatus.VERIFIED],
         },
         ...(q
           ? {

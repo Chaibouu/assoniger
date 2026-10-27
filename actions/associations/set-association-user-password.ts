@@ -109,6 +109,11 @@ export async function setAssociationManagedUserPassword(
       data: { password: hashed },
     });
 
+    // Mot de passe défini par la modération : les sessions ouvertes du compte sont fermées
+    if (actor.id !== assoc.userId) {
+      await db.session.deleteMany({ where: { userId: assoc.userId } });
+    }
+
     revalidateAssociationWorkspaceRoot(associationId);
     revalidatePath("/dashboard/associations");
     return { ok: true };

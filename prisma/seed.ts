@@ -3,6 +3,14 @@ import bcrypt from "bcryptjs";
 import { GEO_SEED_TREE } from "../lib/geo-seed-data";
 import { REGION_LABELS } from "../lib/geo-labels";
 
+// `npm run seed` lance ts-node directement : charger `.env` (Node ≥ 20.6).
+// Ignoré si le fichier est absent (variables déjà fournies par l'environnement, ex. CI).
+try {
+  process.loadEnvFile(".env");
+} catch {
+  // pas de fichier .env
+}
+
 const prisma = new PrismaClient();
 
 async function upsertDepartement(regionId: string, name: string) {
@@ -61,38 +69,59 @@ async function seedGeoReferential() {
   console.log("Référentiel géographique à jour.");
 }
 
-const admins = [
-  {
-    name: "Admin User",
-    email: "admin@gmail.com",
-    role: UserRole.ADMIN,
-    emailVerified: new Date(),
-  },
-];
+/** Identifiants du super-admin initial, lus depuis `.env` (jamais en dur dans le code). */
+function readSuperAdminSeedConfig() {
+  const email = process.env.SUPER_ADMIN_EMAIL?.trim();
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const name = process.env.SUPER_ADMIN_NAME?.trim() || "Super administrateur";
+  // "true" : réinitialise le mot de passe d'un compte déjà existant avec SUPER_ADMIN_PASSWORD
+  const resetPassword = process.env.SUPER_ADMIN_RESET_PASSWORD?.trim().toLowerCase() === "true";
+
+  if (!email || !password) {
+    throw new Error(
+      "SUPER_ADMIN_EMAIL et SUPER_ADMIN_PASSWORD doivent être définis dans .env pour créer le super-admin."
+    );
+  }
+  if (password.length < 12) {
+    throw new Error("SUPER_ADMIN_PASSWORD doit contenir au moins 12 caractères.");
+  }
+
+  return { name, email, password, resetPassword };
+}
 
 async function main() {
   await seedGeoReferential();
 
-  console.log("Seeding admin...");
-  for (const admin of admins) {
-    const existingAdmin = await prisma.user.findFirst({
-      where: { email: admin.email },
-    });
+  console.log("Seeding super-admin...");
+  const config = readSuperAdminSeedConfig();
+  const hashedPassword = await bcrypt.hash(config.password, 12);
 
-    if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash("admin", 10);
-      await prisma.user.create({
-        data: {
-          name: admin.name,
-          email: admin.email,
-          role: admin.role,
-          emailVerified: admin.emailVerified,
-          password: hashedPassword,
-        },
-      });
-    }
+  const existing = await prisma.user.findFirst({
+    where: { email: { equals: config.email, mode: "insensitive" } },
+  });
+
+  if (!existing) {
+    await prisma.user.create({
+      data: {
+        name: config.name,
+        email: config.email,
+        role: UserRole.SUPER_ADMIN,
+        emailVerified: new Date(),
+        password: hashedPassword,
+      },
+    });
+    console.log("Super-admin créé.");
+  } else if (config.resetPassword) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { password: hashedPassword },
+    });
+    // Invalide les sessions ouvertes avec l'ancien mot de passe
+    await prisma.session.deleteMany({ where: { userId: existing.id } });
+    console.log("Mot de passe du super-admin réinitialisé.");
+  } else {
+    console.log("Super-admin déjà présent (SUPER_ADMIN_RESET_PASSWORD=true pour réinitialiser le mot de passe).");
   }
-  console.log("admin seeded successfully!");
 }
 
 main()

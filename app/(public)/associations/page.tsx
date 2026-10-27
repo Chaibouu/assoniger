@@ -34,8 +34,12 @@ export default async function AssociationsPublicPage() {
       },
       orderBy: { createdAt: "desc" },
     }),
-    db.region.findMany({ orderBy: { name: "asc" } }),
-    db.domain.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.region.findMany({ where: { isDeleted: false }, orderBy: { name: "asc" } }),
+    db.domain.findMany({
+      where: { isDeleted: false, isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     db.association.count({
       where: {
         isDeleted: false,

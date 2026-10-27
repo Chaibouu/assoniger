@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { headers } from "next/headers";
 
@@ -14,7 +14,7 @@ export async function GET() {
       return NextResponse.json({ error: "Token manquant" }, { status: 401 });
     }
 
-    const payload = getFullTokenPayload(token);
+    const payload = await verifyAccessToken(token);
 
     if (!payload?.userId) {
       return NextResponse.json(

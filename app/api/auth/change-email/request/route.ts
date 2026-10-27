@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import {
   generateVerificationTokenForModifyEmail,
-  getUserIdFromToken,
+  verifyAccessToken,
 } from "@/lib/tokens";
 import { sendChangeEmailVerification } from "@/lib/mail";
+import { rateLimitRedis, rateLimitRedisEmailTarget } from "@/lib/rateLimit";
+import appConfig from "@/settings";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { newEmail } = await req.json();
     const authHeader = req.headers.get("Authorization");
@@ -19,21 +22,36 @@ export async function POST(req: Request) {
     }
 
     const token = authHeader.split(" ")[1];
-    const userId = await getUserIdFromToken(token);
+    const payload = await verifyAccessToken(token);
+    const userId = payload?.userId;
 
-    if (!userId) {
+    if (!payload || !userId) {
       return NextResponse.json(
         { error: "Token invalide ou expiré" },
         { status: 401 }
       );
     }
 
-    if (!newEmail) {
+    // Une session d'impersonation (audit) ne doit pas pouvoir modifier les identifiants du compte
+    if (payload.isImpersonation) {
+      return NextResponse.json(
+        { error: "Action impossible pendant une session d'audit" },
+        { status: 403 }
+      );
+    }
+
+    if (typeof newEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
       return NextResponse.json(
         { error: "La nouvelle adresse e-mail est requise" },
         { status: 400 }
       );
     }
+
+    // Anti email-bombing : par compte demandeur et par adresse destinataire
+    const rlResponse =
+      (await rateLimitRedis(`email-change:${userId}`, appConfig.rateLimitEmail)) ??
+      (await rateLimitRedisEmailTarget(newEmail));
+    if (rlResponse) return rlResponse;
 
     const emailExists = await db.user.findUnique({
       where: { email: newEmail },

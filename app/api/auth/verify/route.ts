@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { UserRole } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   verifyVerificationToken,
@@ -24,7 +25,8 @@ export async function POST(req: Request) {
     // Cas du token expiré ou invalide
     if (error === "Token expiré") {
       const storedToken = await getVerificationTokenByToken(token);
-      if (!storedToken) {
+      // Les tokens de changement d'email (liés à un userId) se traitent via /api/auth/change-email/confirm
+      if (!storedToken || storedToken.userId) {
         return NextResponse.json(
           { error: "Token introuvable" },
           { status: 400 }
@@ -54,17 +56,32 @@ export async function POST(req: Request) {
 
     // Vérifier si le token est toujours valide dans la base de données
     const storedToken = await getVerificationTokenByTokenId(tokenId);
-    if (!storedToken) {
+    if (!storedToken || storedToken.userId) {
       return NextResponse.json(
         { error: "Token introuvable ou déjà utilisé" },
         { status: 400 }
       );
     }
 
-    // Activer l'utilisateur en mettant à jour le champ emailVerified
+    const user = await db.user.findFirst({
+      where: { email: storedToken.email, isDeleted: false },
+      select: { id: true, role: true, emailVerified: true },
+    });
+    if (!user || storedToken.email.toLowerCase() !== String(email).toLowerCase()) {
+      return NextResponse.json(
+        { error: "Token introuvable ou déjà utilisé" },
+        { status: 400 }
+      );
+    }
+
+    // La vérification d'email n'active que les comptes USER jamais vérifiés.
+    // Les comptes ASSOCIATION et MEMBER restent inactifs jusqu'à la modération
+    // (validation du dossier / approbation de la demande d'adhésion).
+    const activate = user.role === UserRole.USER && !user.emailVerified;
+
     await db.user.update({
-      where: { email },
-      data: { emailVerified: new Date(), isActive: true },
+      where: { id: user.id },
+      data: { emailVerified: new Date(), ...(activate ? { isActive: true } : {}) },
     });
 
     // Supprimer le token de vérification après activation

@@ -3,7 +3,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { redirect, notFound } from "next/navigation";
 import { AssociationStatus, UserRole, type LegalStatus } from "@prisma/client";
-import { Building2, ExternalLink, Mail, Shield, User } from "lucide-react";
+import { Building2, ExternalLink, Mail, Shield, ShieldCheck, User } from "lucide-react";
+import { TwoFactorSettings } from "@/components/dashboard/TwoFactorSettings";
 import { getUser } from "@/actions/getUser";
 import { getDashboardProfileByUserId } from "@/data/user";
 import appConfig from "@/settings";
@@ -237,11 +238,14 @@ export default async function DashboardProfilePage() {
               )
             }
           />
-          <FieldRow
-            label="Authentification à deux facteurs"
-            value={profile.isTwoFactorEnabled ? "Activée" : "Désactivée"}
-          />
         </div>
+      </ProfileSection>
+
+      <ProfileSection title="Double authentification" icon={ShieldCheck}>
+        <TwoFactorSettings
+          enabled={profile.isTwoFactorEnabled}
+          readOnly={"isImpersonation" in result && Boolean(result.isImpersonation)}
+        />
       </ProfileSection>
 
       {!isAssociationAccount ? (

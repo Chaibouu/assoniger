@@ -1,15 +1,14 @@
 /**
  * Rate Limiting — deux couches :
  *
- * 1. Middleware (Edge Runtime) → in-memory, utilisé dans middleware.ts
- *    Rapide, stateless, première ligne de défense.
+ * 1. Middleware → in-memory, utilisé dans middleware.ts
+ *    Rapide, première ligne de défense (propre à chaque instance).
  *
- * 2. API Routes (Node.js Runtime) → Redis sliding window, multi-instance
+ * 2. API Routes → Redis sliding window, partagé entre instances
  *    `rateLimitRedis()` — à appeler en tête des routes sensibles.
- *    Persistant entre redémarrages, partagé entre plusieurs instances PM2.
  *
- * ⚠️  `redis` et `rateLimitRedis` ne peuvent PAS être utilisés dans le middleware
- *     (Edge Runtime ne supporte pas ioredis / TCP).
+ * Les Server Actions appellent les routes d'auth directement (voir `lib/internal-route.ts`)
+ * en transmettant l'IP réelle du visiteur : les limites par IP restent donc par visiteur.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -146,3 +145,11 @@ export const rateLimitRedisAuth = (ip: string) =>
 
 export const rateLimitRedisEmail = (ip: string) =>
   rateLimitRedis(`email:${ip}`, appConfig.rateLimitEmail);
+
+/** Par adresse destinataire : empêche d'inonder une même boîte depuis plusieurs IP. */
+export const rateLimitRedisEmailTarget = (email: string) =>
+  rateLimitRedis(`email-to:${email.trim().toLowerCase()}`, appConfig.rateLimitEmail);
+
+/** Par compte : limite les essais de code 2FA, quelle que soit l'IP. */
+export const rateLimitRedis2fa = (userId: string) =>
+  rateLimitRedis(`2fa:${userId}`, appConfig.rateLimit2fa);

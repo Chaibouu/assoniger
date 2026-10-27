@@ -11,25 +11,33 @@ export interface GeoInfo {
 }
 
 // Fonction pour extraire l'IP de manière compatible avec tous les hébergeurs
-export function getClientIP(req: NextRequest): string {
-  const headers = [
-    "x-forwarded-for",
-    "x-real-ip",
-    "x-client-ip",
-    "cf-connecting-ip", // Cloudflare
-    "x-forwarded",
-    "forwarded-for",
-    "forwarded"
-  ];
+/**
+ * IP du client, utilisée pour le rate limiting et l'audit.
+ *
+ * Les headers d'IP sont fournis par le client et donc falsifiables : on ne lit que
+ * ce que le proxy de confiance a écrit.
+ * - `TRUSTED_IP_HEADER` : header posé par le proxy et écrasant la valeur client
+ *   (ex. `cf-connecting-ip` derrière Cloudflare, `x-real-ip` avec nginx).
+ * - Sinon `x-forwarded-for` : on prend l'entrée ajoutée par le proxy le plus proche,
+ *   en partant de la droite (`TRUSTED_PROXY_COUNT`, 1 par défaut). Le premier élément,
+ *   écrit par le client, n'est jamais utilisé.
+ */
+export function getClientIP(req: { headers: Pick<Headers, "get"> }): string {
+  const trustedHeader = process.env.TRUSTED_IP_HEADER?.trim().toLowerCase();
+  if (trustedHeader && trustedHeader !== "x-forwarded-for") {
+    const value = req.headers.get(trustedHeader)?.trim();
+    return value || "127.0.0.1";
+  }
 
-  for (const header of headers) {
-    const value = req.headers.get(header);
-    if (value) {
-      const ip = value.split(",")[0].trim();
-      if (ip && ip !== "unknown") {
-        return ip;
-      }
-    }
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    const hops = forwardedFor
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter((ip) => ip && ip !== "unknown");
+    const proxyCount = Math.max(1, parseInt(process.env.TRUSTED_PROXY_COUNT ?? "1", 10) || 1);
+    const ip = hops[Math.max(0, hops.length - proxyCount)];
+    if (ip) return ip;
   }
 
   return "127.0.0.1";

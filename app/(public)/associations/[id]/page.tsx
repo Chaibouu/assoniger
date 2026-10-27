@@ -7,6 +7,7 @@ import {
   ExternalLink, Tag, Landmark, ArrowRight, CheckCircle2,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import { ASSOCIATION_MEMBER_PENDING_POSITION } from "@/lib/association-member-kind";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import appConfig from "@/settings";
@@ -70,7 +71,8 @@ export default async function AssociationPublicDetailPage({
         include: { domain: { select: { name: true } } },
       },
       members: {
-        where: { isDeleted: false },
+        // Les demandes d'adhésion en attente ne sont pas des membres : jamais affichées publiquement
+        where: { isDeleted: false, position: { not: ASSOCIATION_MEMBER_PENDING_POSITION } },
         orderBy: { createdAt: "asc" },
       },
       needs: {

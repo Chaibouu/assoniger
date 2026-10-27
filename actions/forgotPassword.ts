@@ -1,6 +1,8 @@
 "use server";
 
 import { PasswordResetSchema } from "@/schemas";
+import { callRoute } from "@/lib/internal-route";
+import { POST as forgotPasswordRoute } from "@/app/api/auth/forgot-password/route";
 
 export const forgotPassword = async (data: { email: string }) => {
   const validatedData = PasswordResetSchema.safeParse(data);
@@ -16,19 +18,14 @@ export const forgotPassword = async (data: { email: string }) => {
   const { email } = validatedData.data;
 
   try {
-    // Appeler l'API forgot-password
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/forgot-password`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      }
+    // Appel direct de la route forgot-password (IP réelle du visiteur transmise)
+    const { ok, data: result } = await callRoute<{ error?: string; message?: string }>(
+      forgotPasswordRoute,
+      "/api/auth/forgot-password",
+      { body: { email } }
     );
 
-    const result = await response.json();
-
-    if (!response.ok) {
+    if (!ok) {
       // Afficher l'erreur envoyée par le backend
       return {
         error:
@@ -37,7 +34,9 @@ export const forgotPassword = async (data: { email: string }) => {
     }
 
     return {
-      success: "Un email de réinitialisation de mot de passe a été envoyé.",
+      success:
+        result.message ||
+        "Si un compte existe pour cette adresse, un email de réinitialisation a été envoyé.",
     };
   } catch (error) {
     console.error("Erreur dans forgotPasswordAction:", error);

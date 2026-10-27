@@ -15,9 +15,8 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 interface ServiceStatus {
-  status: "ok" | "error";
+  status: "ok" | "error" | "not_configured";
   latencyMs?: number;
-  error?: string;
 }
 
 async function checkDatabase(): Promise<ServiceStatus> {
@@ -26,16 +25,16 @@ async function checkDatabase(): Promise<ServiceStatus> {
     await db.$queryRaw`SELECT 1`;
     return { status: "ok", latencyMs: Date.now() - start };
   } catch (err) {
-    return {
-      status: "error",
-      latencyMs: Date.now() - start,
-      error: err instanceof Error ? err.message : "Unknown error",
-    };
+    // Détail en logs serveur uniquement : le message Prisma peut contenir l'hôte de la base
+    console.error("[health] base de données :", err);
+    return { status: "error", latencyMs: Date.now() - start };
   }
 }
 
 async function checkRedis(): Promise<ServiceStatus> {
   const start = Date.now();
+  // Sans REDIS_URL, ioredis tenterait localhost : Redis est optionnel (cache et rate limit en repli)
+  if (!process.env.REDIS_URL) return { status: "not_configured" };
   try {
     // Import dynamique — ioredis requiert Node.js runtime
     const { redis } = await import("@/lib/redis");
@@ -45,26 +44,21 @@ async function checkRedis(): Promise<ServiceStatus> {
       latencyMs: Date.now() - start,
     };
   } catch (err) {
-    return {
-      status: "error",
-      latencyMs: Date.now() - start,
-      error: err instanceof Error ? err.message : "Unknown error",
-    };
+    console.error("[health] redis :", err);
+    return { status: "error", latencyMs: Date.now() - start };
   }
 }
 
 export async function GET() {
   const [database, redis] = await Promise.all([checkDatabase(), checkRedis()]);
 
-  const allOk = database.status === "ok" && redis.status === "ok";
+  const allOk = database.status === "ok" && redis.status !== "error";
   const httpStatus = allOk ? 200 : 503;
 
   return NextResponse.json(
     {
       status: allOk ? "ok" : "degraded",
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version ?? "unknown",
-      uptime: Math.floor(process.uptime()),
       services: { database, redis },
     },
     { status: httpStatus }
