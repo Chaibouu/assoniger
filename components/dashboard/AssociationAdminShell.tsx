@@ -80,6 +80,7 @@ export async function AssociationAdminShell({
         requireCurrentPassword={false}
         canFullEdit={currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUPER_ADMIN}
         canUseToolbar={true}
+        canToggleStatus={true} // vue réservée à la modération (redirection plus haut sinon)
         showPendingDossier={association.status === AssociationStatus.PENDING}
         isEditMode={false}
       />

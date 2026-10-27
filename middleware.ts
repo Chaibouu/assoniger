@@ -7,7 +7,8 @@ import {
 } from "@/routes";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getUser } from "./actions/getUser";
+import { resolveSessionUser } from "./lib/session";
+import { SESSION_HEADER, encodeSessionHeader } from "./lib/session-header";
 import { applyRateLimit } from "./lib/rateLimit";
 import { isRouteProtected } from "./utils/is-route-protected";
 
@@ -63,11 +64,16 @@ export async function middleware(req: NextRequest) {
     const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
     const csp = buildCspWithNonce(nonce);
 
+    // L'en-tête de session interne n'est jamais accepté depuis l'extérieur (toutes les branches)
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.delete(SESSION_HEADER);
+    const passThrough = () => NextResponse.next({ request: { headers: requestHeaders } });
+
     // ─── Rate limiting (in-memory) sur les routes d'auth ──────────────────
     if (isApiAuthRoute) {
       const rateLimitResponse = await applyRateLimit(req);
       if (rateLimitResponse) return rateLimitResponse;
-      return NextResponse.next();
+      return passThrough();
     }
 
     // ─── Routes API ────────────────────────────────────────────────────────
@@ -82,45 +88,76 @@ export async function middleware(req: NextRequest) {
           );
         }
       }
-      return NextResponse.next();
+      return passThrough();
     }
 
     // ─── Routes Frontend ───────────────────────────────────────────────────
     // Transmettre le nonce en header de requête pour que le RootLayout puisse le lire
-    const requestHeaders = new Headers(req.headers);
     requestHeaders.set("x-nonce", nonce);
 
-    const result = await getUser();
+    // Résolution directe (base de données) : aucun appel HTTP interne vers /api/profile ou /api/auth/refresh
+    const result = await resolveSessionUser(
+      {
+        accessToken: req.cookies.get("accessToken")?.value,
+        refreshToken: req.cookies.get("refreshToken")?.value,
+        impersonationToken: req.cookies.get("impersonationToken")?.value,
+      },
+      // Le middleware pose les cookies sur la réponse : il peut renouveler le refresh token
+      { rotateRefreshToken: true }
+    );
 
-    // Rafraîchissement du token d'accès si nécessaire
-    if (result?.tokenInfo) {
-      const response = NextResponse.next({
-        request: { headers: requestHeaders },
-      });
-      response.cookies.set({
-        name: "accessToken",
-        value: result.tokenInfo.accessToken,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: result.tokenInfo.expiresAt,
-        path: "/",
-        sameSite: "lax",
-      });
-      response.headers.set("Content-Security-Policy", csp);
-      response.headers.set("x-nonce", nonce);
-      return response;
+    // Tokens rafraîchis : transmis aussi aux Server Components de cette requête
+    // (sinon getUser() relirait les anciens cookies et rafraîchirait une seconde fois)
+    const tokenInfo = "tokenInfo" in result ? result.tokenInfo : undefined;
+    if (tokenInfo) {
+      req.cookies.set("accessToken", tokenInfo.accessToken);
+      if (tokenInfo.refreshToken) req.cookies.set("refreshToken", tokenInfo.refreshToken);
+      requestHeaders.set("cookie", req.cookies.toString());
     }
 
-    const isLoggedIn = !!result?.user && !result.error;
-    const userRole = result?.user?.user?.role;
-    const protectedRoute = isRouteProtected(userRole, nextUrl.pathname);
+    // Session résolue transmise (signée) aux pages et actions : getUser() n'interroge plus la base
+    const { tokenInfo: _refreshed, ...sessionForApp } = result as typeof result & { tokenInfo?: unknown };
+    const sessionHeader = encodeSessionHeader(sessionForApp);
+    if (sessionHeader) requestHeaders.set(SESSION_HEADER, sessionHeader);
+
+    /** Pose le cookie rafraîchi sur toute réponse (y compris les redirections). */
+    const withRefreshedCookie = (response: NextResponse) => {
+      if (tokenInfo) {
+        response.cookies.set({
+          name: "accessToken",
+          value: tokenInfo.accessToken,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: tokenInfo.expiresAt,
+          path: "/",
+          sameSite: "lax",
+        });
+        if (tokenInfo.refreshToken) {
+          response.cookies.set({
+            name: "refreshToken",
+            value: tokenInfo.refreshToken,
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: tokenInfo.refreshTokenMaxAge,
+            path: "/",
+            sameSite: "lax",
+          });
+        }
+      }
+      return response;
+    };
+
+    // Les contrôles de rôle s'appliquent aussi quand le token vient d'être rafraîchi
+    const isLoggedIn = "user" in result && !!result.user;
+    const userRole = "user" in result ? result.user?.user?.role : undefined;
+    const protectedRoute = isRouteProtected(userRole ?? "", nextUrl.pathname);
 
     if (isLoggedIn && protectedRoute) {
-      return NextResponse.redirect(new URL("/unauthorized", nextUrl));
+      return withRefreshedCookie(NextResponse.redirect(new URL("/unauthorized", nextUrl)));
     }
 
     if (isAuthRoute && isLoggedIn) {
-      return NextResponse.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl));
+      return withRefreshedCookie(NextResponse.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl)));
     }
 
     if (!isPublicRoute && !isAuthRoute && !isLoggedIn) {
@@ -141,7 +178,7 @@ export async function middleware(req: NextRequest) {
     });
     response.headers.set("Content-Security-Policy", csp);
     response.headers.set("x-nonce", nonce);
-    return response;
+    return withRefreshedCookie(response);
   } catch (error) {
     console.error("Erreur dans le middleware:", error);
     return NextResponse.redirect(new URL("/auth/login", nextUrl));
@@ -149,5 +186,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // Runtime Node.js (Next ≥ 15.5) : nécessaire pour Prisma et le déchiffrement des tokens
+  runtime: "nodejs",
   matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
 };

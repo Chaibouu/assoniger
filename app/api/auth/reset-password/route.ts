@@ -4,6 +4,7 @@ import { verifyPasswordResetToken } from "@/lib/tokens";
 import { getUserByEmail } from "@/data/user";
 import { db } from "@/lib/db";
 import { ResetPasswordSchema } from "@/schemas";
+import { getPwnedPasswordError } from "@/lib/hibp";
 
 export async function POST(req: Request) {
   try {
@@ -90,19 +91,27 @@ export async function POST(req: Request) {
       );
     }
 
+    const pwnedError = await getPwnedPasswordError(newPassword);
+    if (pwnedError) {
+      return NextResponse.json({ error: pwnedError }, { status: 400 });
+    }
+
     // Hacher le nouveau mot de passe
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Mettre à jour le mot de passe de l'utilisateur
-    await db.user.update({
-      where: { email: user.email as string },
-      data: { password: hashedPassword },
-    });
-
-    // Supprimer le token de réinitialisation après usage
-    await db.passwordResetToken.delete({
-      where: { id: passwordResetToken.id },
-    });
+    // Nouveau mot de passe + révocation de toutes les sessions ouvertes (un éventuel
+    // attaquant connecté est déconnecté) + suppression du token à usage unique
+    await db.$transaction([
+      db.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword },
+      }),
+      db.session.deleteMany({ where: { userId: user.id } }),
+      db.failedLoginAttempt.deleteMany({ where: { userId: user.id } }),
+      db.passwordResetToken.delete({
+        where: { id: passwordResetToken.id },
+      }),
+    ]);
 
     return NextResponse.json(
       { message: "Mot de passe réinitialisé avec succès" },

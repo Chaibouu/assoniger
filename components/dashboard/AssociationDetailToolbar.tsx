@@ -37,6 +37,8 @@ export type AssociationDetailToolbarProps = {
   requireCurrentPassword: boolean;
   canFullEdit: boolean;
   canUseToolbar: boolean;
+  /** Activer / désactiver la fiche : réservé à la modération. */
+  canToggleStatus: boolean;
   showPendingDossier: boolean;
   isEditMode: boolean;
 };
@@ -50,6 +52,7 @@ export function AssociationDetailToolbar({
   requireCurrentPassword,
   canFullEdit,
   canUseToolbar,
+  canToggleStatus,
   showPendingDossier,
   isEditMode,
 }: AssociationDetailToolbarProps) {
@@ -144,22 +147,24 @@ export function AssociationDetailToolbar({
                 </Button>
               ) : null}
 
-              <form action={toggleAssociationStatusAction}>
-                <input type="hidden" name="associationId" value={associationId} />
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="icon"
-                  title={isActive ? "Désactiver" : "Activer"}
-                  aria-label={isActive ? "Désactiver" : "Activer"}
-                >
-                  {isActive ? (
-                    <PowerOff className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  ) : (
-                    <Power className="h-4 w-4" style={{ color: appConfig.primaryColor }} aria-hidden />
-                  )}
-                </Button>
-              </form>
+              {canToggleStatus ? (
+                <form action={toggleAssociationStatusAction}>
+                  <input type="hidden" name="associationId" value={associationId} />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="icon"
+                    title={isActive ? "Désactiver" : "Activer"}
+                    aria-label={isActive ? "Désactiver" : "Activer"}
+                  >
+                    {isActive ? (
+                      <PowerOff className="h-4 w-4 text-muted-foreground" aria-hidden />
+                    ) : (
+                      <Power className="h-4 w-4" style={{ color: appConfig.primaryColor }} aria-hidden />
+                    )}
+                  </Button>
+                </form>
+              ) : null}
 
               {hasLinkedUser ? (
                 <Button

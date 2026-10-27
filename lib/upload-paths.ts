@@ -1,19 +1,19 @@
 /**
- * Chemins d’upload à la racine du projet : `uploads/...` (hors `public/`).
+ * Chemins d’upload : `uploads/...`, stockés sur Cloudflare R2 (voir `lib/storage.ts`).
  * Les fichiers sont exposés via {@see app/uploads/[...path]/route.ts}.
  */
 
-import { resolve, relative } from "path";
+import { posix } from "path";
 
 const UPLOADS_ROOT_NAME = "uploads";
 
-/** Racine disque des fichiers exposés sous l’URL `/uploads/...`. */
-export function getUploadsRootDir(): string {
-  return resolve(process.cwd(), UPLOADS_ROOT_NAME);
+/** Dossier des fichiers envoyés via `/api/upload` par un utilisateur (hors association). */
+export function userUploadRelative(userId: string): string {
+  return `${UPLOADS_ROOT_NAME}/users/${userId}`;
 }
 
 /**
- * Normalise la destination passée à `uploadFile` : tout est rangé sous `uploads/` à la racine.
+ * Normalise la destination passée à `uploadFile` : tout est rangé sous `uploads/`.
  * Pour les associations, utiliser `lib/association-upload-paths.ts` (`…/{id}/registration`, `…/{id}/documents`).
  * Accepte encore les anciennes valeurs `public/uploads` ou tout chemin relatif sûr sous `uploads/`.
  */
@@ -38,20 +38,17 @@ export function toPublicUploadUrl(normalizedRelativeDir: string, filename: strin
 }
 
 /**
- * Résout une URL `/uploads/...` vers un chemin absolu sous le dossier `uploads/` du projet.
+ * Convertit une URL `/uploads/...` en clé d’objet R2 (`uploads/...`).
  * Retourne null si path traversal ou hors de `uploads/`.
  */
-export function resolveSafeUploadsDiskPath(publicUrlPath: string): string | null {
-  const trimmed = publicUrlPath.trim().replace(/^\/+/, "");
-  if (!trimmed.toLowerCase().startsWith(`${UPLOADS_ROOT_NAME}/`)) {
+export function toUploadStorageKey(publicUrlPath: string): string | null {
+  const trimmed = publicUrlPath.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (trimmed.includes("\0") || trimmed.split("/").includes("..")) {
     return null;
   }
-
-  const uploadsRoot = getUploadsRootDir();
-  const absolutePath = resolve(process.cwd(), trimmed);
-  const rel = relative(uploadsRoot, absolutePath);
-  if (rel.startsWith("..") || rel.includes("..")) {
+  const key = posix.normalize(trimmed);
+  if (!key.startsWith(`${UPLOADS_ROOT_NAME}/`) || key.endsWith("/")) {
     return null;
   }
-  return absolutePath;
+  return key;
 }

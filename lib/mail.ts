@@ -2,14 +2,16 @@ import nodemailer, { TransportOptions } from "nodemailer";
 import appConfig from "@/settings";
 
 const domain = process.env.NEXT_PUBLIC_APP_URL;
-const emailUser = process.env.MAIL_AUTH_USER;
+const emailUser = process.env.EMAIL_SERVER_USER ?? process.env.MAIL_AUTH_USER;
+// Expéditeur : EMAIL_FROM si défini, sinon "AssoNiger <compte SMTP>"
+const mailFrom = process.env.EMAIL_FROM || `${appConfig.appName} <${emailUser}>`;
 const transporter = nodemailer.createTransport(
   appConfig.mailOptions as TransportOptions
 );
 
 export const sendTwoFactorTokenEmail = async (email: string, token: string) => {
   const mailOptions = {
-    from: `${appConfig.appName} ${emailUser}`,
+    from: mailFrom,
     to: email,
     subject: "2FA Code",
     html: `<p>Your 2FA code: ${token}</p>`,
@@ -23,7 +25,7 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
   const resetLink = `${domain}/auth/reset-password?token=${encodedToken}`;
 
   const mailOptions = {
-    from: `${appConfig.appName} ${emailUser}`,
+    from: mailFrom,
     to: email,
     subject: "Reset your password",
     html: `<p>Click <a href="${resetLink}">here</a> to reset password.</p>`,
@@ -36,7 +38,7 @@ export const sendVerificationEmail = async (email: string, token: string) => {
   const confirmLink = `${domain}/auth/verify?token=${encodedToken}`;
 
   const mailOptions = {
-    from: `${appConfig.appName} ${emailUser}`,
+    from: mailFrom,
     to: email,
     subject: "Vérification de votre compte",
     html: `<p>Merci de vous être inscrit. Cliquez sur le lien suivant pour      vérifier votre compte :</p>
@@ -59,7 +61,7 @@ export const sendLoginNotificationEmail = async (
   }
 ) => {
   const mailOptions = {
-    from: `${appConfig.appName} <${emailUser}>`,
+    from: mailFrom,
     to: email,
     subject: "Nouvelle connexion à votre compte",
     html: `
@@ -89,7 +91,7 @@ export const sendChangeEmailVerification = async (
   const verificationLink = `${domain}/auth/verify-email?token=${encodedToken}`;
 
   const mailOptions = {
-    from: `${appConfig.appName} <${emailUser}>`,
+    from: mailFrom,
     to: email,
     subject: "Confirmation de changement d'adresse e-mail",
     html: `

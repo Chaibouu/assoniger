@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadFromFormData, validateFile } from "@/lib/upload";
 import { handleApiError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { getBearerAuthenticatedUser } from "@/lib/api-auth";
+import { userUploadRelative } from "@/lib/upload-paths";
 
 /**
- * API route pour uploader des fichiers
+ * API route pour uploader des fichiers (utilisateur authentifié uniquement)
  * POST /api/upload
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await getBearerAuthenticatedUser(req);
+    if ("error" in auth) return auth.error;
+    if (!auth.user.isActive) {
+      return NextResponse.json({ error: "Compte désactivé" }, { status: 403 });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File;
 
@@ -26,7 +34,7 @@ export async function POST(req: NextRequest) {
         "image/gif",
         "application/pdf",
       ],
-      destination: "uploads",
+      destination: userUploadRelative(auth.user.id),
     };
 
     // Valider le fichier

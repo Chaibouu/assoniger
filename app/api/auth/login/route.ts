@@ -17,8 +17,11 @@ import {
 import { LoginSchema } from "@/schemas";
 import { audit } from "@/lib/audit";
 import { checkPasswordPwned } from "@/lib/hibp";
-import { rateLimitRedisAuth } from "@/lib/rateLimit";
+import { rateLimitRedisAuth, rateLimitRedisEmailTarget } from "@/lib/rateLimit";
 import type { NextRequest } from "next/server";
+
+/** Hash bcrypt d'un mot de passe factice : coût constant quand l'email est inconnu (anti-énumération). */
+const DUMMY_PASSWORD_HASH = "$2a$10$CCqy0R34VKSiKyTt0t.adefeq9k9RnTMlFcgZUW7kNn68iRD2JZJ2";
 
 function hashRefreshToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -50,24 +53,10 @@ export async function POST(req: NextRequest) {
     const user = await getUserByEmail(email);
 
     if (!user) {
+      // Même coût qu'une vraie vérification : le temps de réponse ne révèle pas si l'email existe
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       await audit({ action: "LOGIN_FAILURE", ipAddress: ip, status: "FAILURE", metadata: { email, reason: "Email introuvable" } });
       return NextResponse.json({ error: "Email ou mot de passe incorrect" }, { status: 401 });
-    }
-
-    if (!user.emailVerified) {
-      const verificationToken = await generateVerificationToken(user.email as string);
-      await sendVerificationEmail(user.email as string, verificationToken);
-      return NextResponse.json(
-        { error: "Veuillez vérifier votre email. Un nouvel email de vérification a été envoyé." },
-        { status: 403 }
-      );
-    }
-
-    if (!user.isActive) {
-      return NextResponse.json(
-        { error: "Votre compte est désactivé. Contactez l'administrateur." },
-        { status: 403 }
-      );
     }
 
     // ─── Backoff progressif ───────────────────────────────────────────────────
@@ -111,6 +100,38 @@ export async function POST(req: NextRequest) {
 
     await resetFailedAttempts(user.id);
 
+    // ─── État du compte : seulement APRÈS le mot de passe ─────────────────────
+    // (sinon n'importe qui pourrait savoir si une adresse a un compte, et en déclencher les emails)
+    if (!user.emailVerified) {
+      // Renvoi limité par adresse : la personne a le bon mot de passe mais peut réessayer en boucle
+      const limited = await rateLimitRedisEmailTarget(user.email as string);
+      if (!limited) {
+        const verificationToken = await generateVerificationToken(user.email as string);
+        await sendVerificationEmail(user.email as string, verificationToken);
+      }
+      return NextResponse.json(
+        {
+          error: limited
+            ? "Veuillez vérifier votre email : un lien de vérification vous a déjà été envoyé récemment."
+            : "Veuillez vérifier votre email. Un nouvel email de vérification a été envoyé.",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (!user.isActive) {
+      // Comptes association / membre : inactifs tant que la modération n'a pas validé
+      const awaitingModeration = user.role === "ASSOCIATION" || user.role === "MEMBER";
+      return NextResponse.json(
+        {
+          error: awaitingModeration
+            ? "Votre compte est en attente de validation. Vous serez notifié dès qu'il sera activé."
+            : "Votre compte est désactivé. Contactez l'administrateur.",
+        },
+        { status: 403 }
+      );
+    }
+
     // ─── 2FA TOTP requis ? ────────────────────────────────────────────────────
     if (user.isTwoFactorEnabled) {
       // Retourner un challenge token court (5 min) — pas encore de session
@@ -126,10 +147,15 @@ export async function POST(req: NextRequest) {
       await db.session.deleteMany({ where: { userId: user.id } });
     }
 
-    const accessToken = createEncryptedJWT({ userId: user.id, email: user.email }, "1h");
+    const sessionId = crypto.randomUUID();
+    const accessToken = createEncryptedJWT(
+      { userId: user.id, email: user.email, sid: sessionId },
+      "1h"
+    );
     const rawRefreshToken = crypto.randomBytes(64).toString("hex");
 
     await createSession({
+      id: sessionId,
       userId: user.id,
       sessionToken: accessToken,
       refreshToken: hashRefreshToken(rawRefreshToken),

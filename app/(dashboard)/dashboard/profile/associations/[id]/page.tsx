@@ -142,7 +142,6 @@ export default async function AssociationProfileWorkspacePage({
 
   if (
     currentUser.role === UserRole.ASSOCIATION &&
-    association.userId &&
     association.userId !== currentUser.id
   ) {
     redirect("/unauthorized");
@@ -152,14 +151,14 @@ export default async function AssociationProfileWorkspacePage({
     currentUser.role === UserRole.ADMIN ||
     currentUser.role === UserRole.SUPER_ADMIN ||
     (currentUser.role === UserRole.ASSOCIATION &&
-      (!association.userId || association.userId === currentUser.id));
+      association.userId === currentUser.id);
 
   const isEditMode = resolvedSearchParams?.mode === "edit" && canFullEdit;
 
   const canUseToolbar =
     isModerationStaff ||
     (currentUser.role === UserRole.ASSOCIATION &&
-      (!association.userId || association.userId === currentUser.id));
+      association.userId === currentUser.id);
 
   const showPendingDossier =
     association.status === AssociationStatus.PENDING && isModerationStaff;
@@ -192,6 +191,7 @@ export default async function AssociationProfileWorkspacePage({
           }
           canFullEdit={canFullEdit}
           canUseToolbar={canUseToolbar}
+          canToggleStatus={isModerationStaff}
           showPendingDossier={showPendingDossier}
           isEditMode={isEditMode}
         />

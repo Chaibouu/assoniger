@@ -4,6 +4,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { AssociationStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { getClientIP } from "@/lib/geo";
+import { rateLimitRedis } from "@/lib/rateLimit";
 
 export type MembershipRequestResult =
   | { ok: true }
@@ -41,6 +44,13 @@ export async function requestMembershipAction(
     }
 
     const d = parsed.data;
+
+    /* Formulaire public sans compte : limite par visiteur contre l'envoi massif de fausses demandes */
+    const ip = getClientIP({ headers: await headers() });
+    const limited = await rateLimitRedis(`join-request:${ip}`, { windowMs: 60 * 60 * 1000, max: 5 });
+    if (limited) {
+      return { ok: false, error: "Trop de demandes envoyées. Réessayez dans une heure." };
+    }
 
     /* Vérifier que l'association existe et est active */
     const assoc = await db.association.findFirst({

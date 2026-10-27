@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { UserRole } from "@prisma/client";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 
 export async function getBearerAuthenticatedUser(req: NextRequest) {
@@ -12,7 +12,7 @@ export async function getBearerAuthenticatedUser(req: NextRequest) {
     return { error: NextResponse.json({ error: "Authentification requise" }, { status: 401 }) };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),

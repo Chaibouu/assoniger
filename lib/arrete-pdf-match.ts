@@ -1,49 +1,62 @@
-/** Supprime les accents (NFD + marques combinantes). */
-function stripAccents(s: string): string {
-  return s.normalize("NFD").replace(/\p{M}/gu, "");
-}
-
-/** Normalise espaces, casse, accents. */
-function normalizeHuman(s: string): string {
-  return stripAccents(s)
-    .toLowerCase()
-    .replace(/[   ]/g, " ")
-    .replace(/[\n\r\t]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Chaîne alphanumérique compacte (sans ponctuation ni espaces). */
-function compactAlnum(s: string): string {
-  return stripAccents(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
 /**
- * Remplace les séparateurs courants dans les numéros d'arrêté (/, -, ., \, _)
- * par un espace normalisé pour comparer "2024-012/MATD" == "2024 012 MATD".
+ * Recherche du numéro d'arrêté saisi dans le texte d'un PDF (couche texte ou OCR).
+ *
+ * Règles (on préfère refuser plutôt que valider à tort) :
+ * - la référence complète lettres + chiffres (ex. « 000139/MU/L/SG/DGAC ») est acceptée partout ;
+ * - un numéro seul doit apparaître comme nombre isolé, juste après la mention de l'acte
+ *   (« Arrêté n° », « Décision n° »…) — ni l'année d'une date, ni un téléphone, ni le numéro
+ *   d'un décret cité dans les visas (« Vu le décret n° … ») ;
+ * - les zéros de tête sont ignorés (139 ↔ 000139) ;
+ * - les confusions OCR (O/0, I/l/1) ne sont tolérées qu'à l'intérieur du numéro recherché ;
+ * - un numéro seulement *proche* n'est jamais validé : il est renvoyé comme suggestion.
  */
-function normalizeSeparators(s: string): string {
-  return s
-    .replace(/[/\\.\-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+
+export type ArreteMatchResult =
+  | { status: "found"; excerpt: string; strength: "full" | "number" }
+  | { status: "near"; excerpt: string; suggestion: string }
+  | { status: "not_found" };
+
+type Normalized = { text: string; map: number[] };
+
+/** Minuscules, sans accents, espaces unifiés ; `map[i]` = index du caractère d'origine. */
+function normalizeWithMap(input: string): Normalized {
+  let text = "";
+  const map: number[] = [];
+  let lastSpace = true;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (/\s/.test(ch)) {
+      if (!lastSpace) {
+        text += " ";
+        map.push(i);
+        lastSpace = true;
+      }
+      continue;
+    }
+    const base = ch.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    for (const b of base) {
+      text += b;
+      map.push(i);
+    }
+    lastSpace = false;
+  }
+  return { text, map };
 }
 
-/** Corrections OCR courantes avant extraction des chiffres. */
-function ocrFix(s: string): string {
-  return s
-    .replace(/[OoØø]/g, "0")
-    .replace(/[Il|!]/g, "1")
-    .replace(/[Ss]/g, "5")
-    .replace(/[Zz]/g, "2");
+/** Uniquement lettres et chiffres, avec correspondance vers le texte normalisé. */
+function compactWithMap(norm: Normalized): Normalized {
+  let text = "";
+  const map: number[] = [];
+  for (let i = 0; i < norm.text.length; i++) {
+    const ch = norm.text[i];
+    if (/[a-z0-9]/.test(ch)) {
+      text += ch;
+      map.push(norm.map[i]);
+    }
+  }
+  return { text, map };
 }
 
-/** Uniquement les chiffres (après corrections OCR). */
-function digitOnly(s: string): string {
-  return ocrFix(s).replace(/\D/g, "");
-}
-
-/** Distance de Levenshtein. */
 function levenshtein(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -60,147 +73,154 @@ function levenshtein(a: string, b: string): number {
   return row[b.length];
 }
 
-/** Tolérance Levenshtein calibrée par longueur. */
-function maxLev(len: number): number {
-  if (len <= 3) return 0;
-  if (len <= 5) return 1;
-  if (len <= 9) return 1;
-  return Math.min(2, Math.floor(len * 0.13));
+/** Extrait lisible (une ligne) autour d'une zone du texte d'origine. */
+function excerptAround(original: string, start: number, end: number): string {
+  const from = Math.max(0, start - 45);
+  const to = Math.min(original.length, end + 45);
+  const raw = original.slice(from, to).replace(/\s+/g, " ").trim();
+  return `${from > 0 ? "…" : ""}${raw}${to < original.length ? "…" : ""}`;
 }
 
-/** Runs de chiffres (3–14) extraits du texte PDF, après corrections OCR. */
-function extractDigitRuns(text: string): string[] {
-  const t = ocrFix(stripAccents(text));
-  return [...t.matchAll(/\d{3,14}/g)].map((m) => m[0]);
-}
-
-/** Vérifie si `run` se termine par `ref` (avec éventuels zéros de tête avant). */
-function endsWith(run: string, ref: string): boolean {
-  if (!run.endsWith(ref)) return false;
-  return /^0*$/.test(run.slice(0, run.length - ref.length));
-}
-
-/** Compare deux séquences de chiffres avec tolérance floue. */
-function fuzzyDigits(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (endsWith(a, b) || endsWith(b, a)) return true;
-  if (Math.abs(a.length - b.length) <= 1 && levenshtein(a, b) <= maxLev(Math.max(a.length, b.length))) return true;
-  return false;
-}
-
-/** Toutes les séquences de chiffres candidates issues de la référence saisie. */
-function digitCandidates(reference: string): string[] {
-  const out = new Set<string>();
-  const runs = [...reference.matchAll(/\d{3,14}/g)].map((m) => m[0]);
-  for (const r of runs) {
-    out.add(r);
-    const stripped = r.replace(/^0+/, "") || "0";
-    if (stripped.length >= 3) out.add(stripped);
-  }
-  const full = digitOnly(reference);
-  if (full.length >= 3) {
-    out.add(full);
-    const stripped = full.replace(/^0+/, "") || "0";
-    if (stripped.length >= 3) out.add(stripped);
-  }
-  return [...out].sort((a, b) => b.length - a.length);
-}
-
-/** Teste si au moins un candidat chiffre de la référence correspond à un run chiffre du PDF. */
-function digitMatchFound(reference: string, pdfText: string): boolean {
-  const candidates = digitCandidates(reference);
-  if (candidates.length === 0) return false;
-  const pdfRuns = extractDigitRuns(pdfText);
-  for (const cand of candidates) {
-    for (const run of pdfRuns) {
-      if (fuzzyDigits(digitOnly(cand), digitOnly(run))) return true;
-    }
-  }
-  return false;
-}
+/** Mentions de l'acte lui-même (« Arrêté », lu aussi « Arrété », « ARRETE »… à l'OCR). */
+const ACT_MENTION_RE = /(arr[a-z]{0,2}t[a-z]{0,2}|decision|recepiss[a-z]*|agrement)/g;
+/** Autres textes cités dans les visas : leur numéro n'est pas celui de l'arrêté. */
+const OTHER_ACT_RE = /\b(decret|loi|ordonnance|circulaire)\b/;
 
 /**
- * Génère toutes les variantes de matching à tester pour la référence saisie :
- * - Référence entière normalisée
- * - Séparateurs remplacés par espace
- * - Version compacte alphanumérique
- * - Sous-parties (tokens) de la référence
- * - Numéro seul sans préfixe "N°", "Arrêté", etc.
+ * Le nombre commençant à `start` est-il le numéro de l'acte ? Il doit suivre de près une mention
+ * d'arrêté / décision / récépissé / agrément :
+ * - sans autre nombre entre les deux (« Arrêté n° 813 du 12 mars 2021 » : 2021 refusé) ;
+ * - sans « décret », « loi »… entre les deux ;
+ * - et pas dans une citation « Vu l'arrêté n° … » (visa d'un autre texte).
  */
-function buildRefVariants(reference: string): string[] {
-  const ref = reference.trim();
-  const variants = new Set<string>();
+function hasReferenceContext(norm: string, start: number): boolean {
+  const windowStart = Math.max(0, start - 60);
+  const before = norm.slice(windowStart, start);
+  let mentionStart = -1;
+  let mentionEnd = -1;
+  for (const m of before.matchAll(ACT_MENTION_RE)) {
+    mentionStart = m.index ?? 0;
+    mentionEnd = mentionStart + m[0].length;
+  }
+  if (mentionEnd < 0) return false;
 
-  // Nettoyage du préfixe "N°", "n°", "numéro", "arrêté n°" etc.
-  const cleaned = ref
-    .replace(/^\s*(arr[eê]t[eé]s?\s*)?(n[°o°º]\.?\s*|num[eé]ro\s*)/i, "")
+  const between = before.slice(mentionEnd);
+  if (/\d/.test(between) || OTHER_ACT_RE.test(between)) return false;
+
+  const absoluteMentionStart = windowStart + mentionStart;
+  const lead = norm.slice(Math.max(0, absoluteMentionStart - 25), absoluteMentionStart);
+  return !/\bvu\b/.test(lead);
+}
+
+/** Retire de la saisie les mots d'introduction (« Arrêté n° … »). */
+function cleanReference(reference: string): string {
+  return normalizeWithMap(reference.trim())
+    .text.replace(/^(arrete\s*)?(n\s*[°º]\s*|n\s+|no\.?\s+|numero\s*:?\s*)?/, "")
     .trim();
+}
 
-  const candidates = [ref, cleaned];
+/** Chiffre → classe tolérant les confusions OCR (0/o, 1/i/l/|). */
+function digitPattern(digits: string): string {
+  return [...digits].map((c) => (c === "0" ? "[0o]" : c === "1" ? "[1il|]" : c)).join("");
+}
 
-  for (const c of candidates) {
-    if (!c) continue;
-    variants.add(normalizeHuman(c));
-    variants.add(normalizeHuman(normalizeSeparators(c)));
-    variants.add(compactAlnum(c));
+function stripLeadingZeros(digits: string): string {
+  return digits.replace(/^0+/, "") || "0";
+}
 
-    // Tokens individuels (longueur ≥ 2, on exclut les mots vides courts)
-    const tokens = normalizeHuman(normalizeSeparators(c)).split(" ").filter((t) => t.length >= 2);
-    for (const t of tokens) {
-      variants.add(t);
-    }
-    // Paires de tokens consécutifs
-    for (let i = 0; i < tokens.length - 1; i++) {
-      variants.add(`${tokens[i]} ${tokens[i + 1]}`);
+/**
+ * Regex du numéro : groupes de chiffres de la saisie (ex. 2024-012 → 2 groupes), séparateurs souples,
+ * zéros de tête facultatifs, nombre isolé (pas collé à d'autres chiffres ni au milieu d'un mot).
+ */
+function buildNumberRegex(groups: string[]): RegExp {
+  const parts = groups.map((g, i) =>
+    i === 0 ? `[0o]*${digitPattern(stripLeadingZeros(g))}` : digitPattern(g)
+  );
+  // Avant : ni chiffre ni lettre, sauf « n » / « o » (ex. « N°000139 » lu « n000139 » à l'OCR)
+  return new RegExp(`(?<![0-9a-mp-z|])${parts.join("[\\s\\-/._]{0,3}")}(?![0-9])`, "g");
+}
+
+/** Nombres (tolérant O/I/l à l'intérieur d'un jeton contenant déjà un chiffre) avec leur position. */
+function numberTokens(norm: string): { value: string; start: number; end: number }[] {
+  const out: { value: string; start: number; end: number }[] = [];
+  const re = /[0-9oil|]*[0-9][0-9oil|]*/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(norm)) !== null) {
+    const value = m[0].replace(/o/g, "0").replace(/[il|]/g, "1");
+    if (value.length >= 3) out.push({ value, start: m.index, end: m.index + m[0].length });
+  }
+  return out;
+}
+
+export function findArreteReference(reference: string, pdfText: string): ArreteMatchResult {
+  const ref = cleanReference(reference);
+  const digitGroups = ref.match(/\d+/g) ?? [];
+  const totalDigits = digitGroups.join("").length;
+  if (!pdfText.trim() || totalDigits < 3) return { status: "not_found" };
+
+  const norm = normalizeWithMap(pdfText);
+
+  // 1. Référence complète lettres + chiffres (forte) : acceptée partout
+  const refCompact = ref.replace(/[^a-z0-9]/g, "");
+  if (refCompact.length >= 6 && /[a-z]/.test(refCompact) && /\d/.test(refCompact)) {
+    const compact = compactWithMap(norm);
+    const idx = compact.text.indexOf(refCompact);
+    if (idx >= 0) {
+      const start = compact.map[idx];
+      const end = compact.map[idx + refCompact.length - 1] + 1;
+      return { status: "found", strength: "full", excerpt: excerptAround(pdfText, start, end) };
     }
   }
 
-  // Retire les variants trop courts ou trop génériques
-  const STOP = new Set(["le", "la", "de", "du", "et", "en", "au", "un", "ne"]);
-  return [...variants].filter((v) => v.length >= 2 && !STOP.has(v));
+  // 2. Numéro isolé, juste après la mention de l'acte (« Arrêté n° … »)
+  const significant = stripLeadingZeros(digitGroups.join(""));
+  const re = buildNumberRegex(digitGroups);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(norm.text)) !== null) {
+    const realDigits = (m[0].match(/\d/g) ?? []).length;
+    if (realDigits < Math.ceil(significant.length / 2)) continue; // surtout des lettres : pas un numéro
+    if (hasReferenceContext(norm.text, m.index)) {
+      const start = norm.map[m.index];
+      const end = norm.map[m.index + m[0].length - 1] + 1;
+      return { status: "found", strength: "number", excerpt: excerptAround(pdfText, start, end) };
+    }
+  }
+
+  // 3. Numéro proche en contexte (probable faute de frappe) : jamais validé, proposé en suggestion
+  const refDigits = digitGroups.join("");
+  if (digitGroups.length === 1 && refDigits.length >= 4) {
+    const maxDistance = refDigits.length >= 8 ? 2 : 1;
+    for (const token of numberTokens(norm.text)) {
+      const candidate = stripLeadingZeros(token.value);
+      if (candidate === significant) continue;
+      if (!hasReferenceContext(norm.text, token.start)) continue;
+      // Comparaison sur le numéro complet (000812 ↔ 000813) et sans zéros de tête (812 ↔ 813)
+      const distance = Math.min(
+        levenshtein(token.value, refDigits),
+        levenshtein(candidate, significant)
+      );
+      if (distance <= maxDistance && Math.abs(token.value.length - refDigits.length) <= 1) {
+        const start = norm.map[token.start];
+        const end = norm.map[token.end - 1] + 1;
+        return {
+          status: "near",
+          suggestion: pdfText.slice(start, end).trim(),
+          excerpt: excerptAround(pdfText, start, end),
+        };
+      }
+    }
+  }
+
+  return { status: "not_found" };
 }
 
-/**
- * Cherche une variante dans le texte PDF (inclusion directe ou fuzzy sur tokens).
- */
-function variantFoundInPdf(variant: string, humanPdf: string, compactPdf: string): boolean {
-  if (humanPdf.includes(variant)) return true;
-  // Matching compact (ignore séparateurs)
-  const cv = compactAlnum(variant);
-  if (cv.length >= 3 && !/^\d+$/.test(cv) && compactPdf.includes(cv)) return true;
-  // Fuzzy sur les tokens : chaque token de la variante doit être présent (ou proche) dans le PDF
-  const tokens = variant.split(" ").filter((t) => t.length >= 3);
-  if (tokens.length >= 2 && tokens.every((t) => {
-    if (humanPdf.includes(t)) return true;
-    const words = humanPdf.split(" ");
-    return words.some((w) => w.length >= 3 && levenshtein(w, t) <= maxLev(t.length));
-  })) return true;
-  return false;
-}
-
-/**
- * Indique si la référence saisie apparaît de façon plausible dans le texte extrait du PDF.
- *
- * Stratégies (ordre décroissant de fiabilité) :
- * 1. Inclusion directe (texte normalisé)
- * 2. Inclusion avec séparateurs homogénéisés
- * 3. Inclusion compacte alphanumérique
- * 4. Sous-parties + fuzzy sur tokens
- * 5. Correspondance des séquences de chiffres (OCR-tolerant)
- */
+/** Compatibilité : true uniquement si la référence est retrouvée avec certitude. */
 export function isArreteReferenceFoundInPdfText(reference: string, pdfText: string): boolean {
-  const ref = reference.trim();
-  if (ref.length < 2) return false;
+  return findArreteReference(reference, pdfText).status === "found";
+}
 
-  const humanPdf = normalizeHuman(pdfText);
-  const compactPdf = compactAlnum(pdfText);
-
-  for (const variant of buildRefVariants(ref)) {
-    if (variantFoundInPdf(variant, humanPdf, compactPdf)) return true;
-  }
-
-  // Fallback chiffres uniquement (robuste aux erreurs OCR sur les numéros)
-  if (digitMatchFound(ref, pdfText)) return true;
-
-  return false;
+/** Le texte contient-il déjà une mention d'acte numérotée exploitable (évite un OCR inutile) ? */
+export function hasNumberedReferenceMention(pdfText: string): boolean {
+  const norm = normalizeWithMap(pdfText).text;
+  return /(arr[a-z]{0,2}t[a-z]*|decision|recepisse)[^0-9]{0,40}\d{3,}/.test(norm);
 }

@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 
-import { Session } from "@prisma/client"; // Importer les types Prisma générés automatiquement
+import type { Prisma } from "@prisma/client";
 
 // Correction de la fonction avec typage adéquat
-export const createSession = async (sessionData: Omit<Session, "id">) => {
+// `id` optionnel : fourni quand le JWT d'accès doit référencer la session (champ `sid`)
+export const createSession = async (sessionData: Prisma.SessionUncheckedCreateInput) => {
   return await db.session.create({
     data: sessionData,
   });

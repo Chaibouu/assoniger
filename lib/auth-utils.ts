@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { refreshUserToken } from "@/lib/user";
+import { refreshSession } from "@/lib/session";
 import { getUserIdFromToken } from "@/lib/tokens";
 
 // Types pour les réponses d'authentification
@@ -15,114 +15,62 @@ export interface AuthenticatedUser {
   userId: string;
 }
 
-// Fonction pour récupérer l'utilisateur authentifié
-export async function getAuthenticatedUser(): Promise<AuthenticatedUser> {
+/**
+ * Access token valide de la requête courante : celui du cookie s'il est encore accepté,
+ * sinon un nouveau émis via le refresh token. null si la session n'est plus valable.
+ */
+async function resolveAccessToken(): Promise<{ accessToken: string; userId: string } | null> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("accessToken")?.value;
   const refreshToken = cookieStore.get("refreshToken")?.value;
 
-  if (!refreshToken) {
+  if (!refreshToken) return null;
+
+  if (accessToken) {
+    const userId = await getUserIdFromToken(accessToken);
+    if (userId) return { accessToken, userId };
+    // Token expiré ou révoqué → rafraîchissement ci-dessous
+  }
+
+  const refreshed = await refreshSession(refreshToken);
+  if ("error" in refreshed) return null;
+
+  const userId = await getUserIdFromToken(refreshed.accessToken);
+  if (!userId) return null;
+
+  // Impossible de poser un cookie depuis un Server Component : le middleware le fera
+  // à la requête suivante. Dans une Server Action ou une route, le cookie est mis à jour.
+  try {
+    cookieStore.set("accessToken", refreshed.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: refreshed.accessTokenExpiresAt,
+      path: "/",
+      sameSite: "lax",
+    });
+  } catch {
+    // contexte en lecture seule
+  }
+
+  return { accessToken: refreshed.accessToken, userId };
+}
+
+// Fonction pour récupérer l'utilisateur authentifié
+export async function getAuthenticatedUser(): Promise<AuthenticatedUser> {
+  const session = await resolveAccessToken();
+  if (!session) {
     redirect("/auth/login");
   }
-
-  // Si pas d'accessToken, essayer de le rafraîchir
-  if (!accessToken) {
-    try {
-      const { accessToken: newAccessToken, accessTokenExpiresAt } =
-        await refreshUserToken(refreshToken);
-
-      cookieStore.set("accessToken", newAccessToken, {
-        httpOnly: true,
-        secure: true,
-        maxAge: accessTokenExpiresAt,
-        path: "/",
-        sameSite: "lax",
-      });
-
-      // Extraire l'userId du token en utilisant getUserIdFromToken
-      const userId = await getUserIdFromToken(newAccessToken);
-      if (!userId) {
-        throw new Error("Token invalide");
-      }
-
-      return { accessToken: newAccessToken, userId };
-    } catch (error) {
-      redirect("/auth/login");
-    }
-  }
-
-  // Extraire l'userId du token existant
-  const userId = await getUserIdFromToken(accessToken);
-  if (!userId) {
-    redirect("/auth/login");
-  }
-
-  return { accessToken, userId };
+  return session;
 }
 
 // Fonction pour vérifier si l'utilisateur est authentifié (sans redirection)
 export async function isAuthenticated(): Promise<boolean> {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get("accessToken")?.value;
-    const refreshToken = cookieStore.get("refreshToken")?.value;
-
-    if (!refreshToken) {
-      return false;
-    }
-
-    if (!accessToken) {
-      // Essayer de rafraîchir le token
-      try {
-        const { accessToken: newAccessToken, accessTokenExpiresAt } =
-          await refreshUserToken(refreshToken);
-
-        cookieStore.set("accessToken", newAccessToken, {
-          httpOnly: true,
-          secure: true,
-          maxAge: accessTokenExpiresAt,
-          path: "/",
-          sameSite: "lax",
-        });
-
-        return true;
-      } catch (error) {
-        return false;
-      }
-    }
-
-    return true;
-  } catch (error) {
+    return (await resolveAccessToken()) !== null;
+  } catch {
     return false;
   }
-}
-
-// Fonction pour faire un appel API authentifié
-export async function authenticatedApiCall<T = any>(
-  endpoint: string,
-  method: string,
-  body?: any
-): Promise<T> {
-  const { accessToken } = await getAuthenticatedUser();
-
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_APP_URL}${endpoint}`,
-    {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Erreur API");
-  }
-
-  return response.json();
 }
 
 // Fonction pour déconnecter l'utilisateur

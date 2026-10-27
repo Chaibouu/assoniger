@@ -2,13 +2,21 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z, type ZodIssue } from "zod";
 import { db } from "@/lib/db";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { logAdminHistory } from "@/lib/admin-history";
+import {
+  ASSOCIATION_MEMBER_PENDING_POSITION,
+  isReservedMemberPosition,
+} from "@/lib/association-member-kind";
 
 const UpdateMemberSchema = z.object({
   fullName: z.string().min(2).optional(),
-  position: z.string().min(2).optional(),
+  position: z
+    .string()
+    .min(2)
+    .refine((p) => !isReservedMemberPosition(p), { message: "Ce poste est réservé" })
+    .optional(),
   phone: z.string().nullable().optional(),
   email: z.string().email("Email invalide").nullable().optional(),
   photoUrl: z.string().url("URL de photo invalide").nullable().optional(),
@@ -25,7 +33,7 @@ async function getAuthenticatedUser(req: NextRequest) {
     };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),
@@ -94,6 +102,14 @@ export async function PATCH(
 
     if (!existingMember) {
       return NextResponse.json({ error: "Membre introuvable" }, { status: 404 });
+    }
+
+    // Une demande d'adhésion se traite via /member-requests (approuver / refuser), pas en édition
+    if (existingMember.position === ASSOCIATION_MEMBER_PENDING_POSITION) {
+      return NextResponse.json(
+        { error: "Une demande d'adhésion en attente ne peut pas être modifiée" },
+        { status: 400 }
+      );
     }
 
     const body = await req.json();

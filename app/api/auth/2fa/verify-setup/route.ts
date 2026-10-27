@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { authenticator } from "otplib";
 import { db } from "@/lib/db";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { headers } from "next/headers";
 import { audit } from "@/lib/audit";
@@ -27,9 +27,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Authentification requise" }, { status: 401 });
     }
 
-    const payload = getFullTokenPayload(token);
+    const payload = await verifyAccessToken(token);
     if (!payload?.userId) {
       return NextResponse.json({ error: "Token invalide" }, { status: 401 });
+    }
+
+    if (payload.isImpersonation) {
+      return NextResponse.json(
+        { error: "Action impossible pendant une session d'audit" },
+        { status: 403 }
+      );
+    }
+
+    // Une 2FA déjà active ne peut pas être remplacée sans prouver le facteur actuel
+    const current = await db.user.findUnique({
+      where: { id: payload.userId },
+      select: { isTwoFactorEnabled: true },
+    });
+    if (current?.isTwoFactorEnabled) {
+      return NextResponse.json(
+        { error: "La double authentification est déjà activée sur ce compte." },
+        { status: 409 }
+      );
     }
 
     const { secret, code } = await req.json();

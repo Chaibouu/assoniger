@@ -71,6 +71,10 @@ model Session {
     userId              String
     sessionToken        String   @unique
     refreshToken        String   @unique // Token de rafraîchissement haché (SHA-256)
+    // Rotation : le token précédent reste accepté quelques secondes (requêtes parallèles du navigateur) ;
+    // réutilisé au-delà, il signale un vol et la session est révoquée.
+    previousRefreshToken  String?
+    refreshTokenRotatedAt DateTime?
     expires             DateTime // Date d'expiration du token d'accès
     refreshTokenExpires DateTime // Expiration du token de rafraîchissement
     lastActivity        DateTime // Date de la dernière activité utilisateur
@@ -81,6 +85,8 @@ model Session {
     isDeleted       Boolean @default(false)
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([previousRefreshToken])
 }
 
 model VerificationToken {

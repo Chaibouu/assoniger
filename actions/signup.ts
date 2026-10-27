@@ -1,6 +1,8 @@
 "use server";
 
 import { SignupSchema } from "@/schemas";
+import { callRoute } from "@/lib/internal-route";
+import { POST as signupRoute } from "@/app/api/auth/signup/route";
 
 export const signup = async (data: {
   name: string;
@@ -20,19 +22,14 @@ export const signup = async (data: {
   const { name, email, password } = validatedData.data;
 
   try {
-    // Appeler l'API signup
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/signup`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-      }
+    // Appel direct de la route signup (IP réelle du visiteur transmise)
+    const { ok, data: result } = await callRoute<{ error?: string }>(
+      signupRoute,
+      "/api/auth/signup",
+      { body: { name, email, password } }
     );
 
-    const result = await response.json();
-
-    if (!response.ok) {
+    if (!ok) {
       // Afficher l'erreur envoyée par le backend
       return { error: result.error || "Erreur lors de l'inscription" };
     }

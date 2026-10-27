@@ -2,15 +2,13 @@
  * Utilitaires pour la gestion des uploads de fichiers
  */
 
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
 import { randomUUID } from "crypto";
 import {
   normalizeUploadDestination,
-  resolveSafeUploadsDiskPath,
   toPublicUploadUrl,
+  toUploadStorageKey,
 } from "@/lib/upload-paths";
+import { deleteObject, putObject } from "@/lib/storage";
 
 export interface UploadOptions {
   maxSize?: number;       // Taille maximale en bytes
@@ -26,7 +24,7 @@ export interface UploadResult {
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-/** Dossier par défaut à la racine du projet ; exposé sous `/uploads/...`. */
+/** Préfixe par défaut des clés R2 ; exposé sous `/uploads/...`. */
 const DEFAULT_DESTINATION_RELATIVE = "uploads";
 
 // ─── Magic Numbers ────────────────────────────────────────────────────────────
@@ -70,16 +68,17 @@ function validateMagicNumber(buffer: Buffer, declaredMime: string): boolean {
 }
 
 /**
- * Normalise et sécurise un nom de fichier fourni par l'utilisateur.
- * - Supprime les path traversals (../ etc.)
- * - Remplace les caractères spéciaux
- * - Tronque à 64 caractères max
+ * Extension déduite du type MIME validé (jamais du nom fourni par le client),
+ * pour que le type servi corresponde toujours au contenu vérifié.
  */
-function sanitizeExtension(filename: string): string {
-  const raw = filename.split(".").pop() ?? "";
-  // Autoriser uniquement lettres, chiffres et tiret — refuser tout le reste
-  return raw.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, 10);
-}
+const EXTENSION_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+  "application/pdf": "pdf",
+};
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -117,7 +116,7 @@ export function validateFile(
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
 /**
- * Upload un fichier vers le système de fichiers local.
+ * Upload un fichier vers Cloudflare R2.
  * Effectue une double validation :
  *   1. Taille et type MIME déclaré (header)
  *   2. Magic number (contenu binaire réel du fichier)
@@ -142,29 +141,26 @@ export async function uploadFile(
     );
   }
 
-  // 3. Écriture sous `uploads/` à la racine ; lecture HTTP via `app/uploads/[...path]/route.ts`.
+  // 3. Destination sous `uploads/` ; lecture HTTP via `app/uploads/[...path]/route.ts`.
   const relativeDest = normalizeUploadDestination(
     options.destination ?? DEFAULT_DESTINATION_RELATIVE
   );
-  const uploadDir = join(process.cwd(), relativeDest);
 
-  if (!existsSync(uploadDir)) {
-    await mkdir(uploadDir, { recursive: true });
-  }
-
-  // 4. Nom de fichier sécurisé : UUID + extension assainie (pas de path traversal possible)
-  const extension = sanitizeExtension(file.name);
+  // 4. Nom de fichier sécurisé : UUID + extension issue du MIME (pas de path traversal possible)
+  const extension = EXTENSION_BY_MIME[file.type];
   if (!extension) {
-    throw new Error("Extension de fichier invalide ou manquante.");
+    throw new Error("Type de fichier non pris en charge.");
   }
 
   const filename = `${randomUUID()}.${extension}`;
-  const filepath = join(uploadDir, filename);
-
-  // 5. Écriture sur le disque
-  await writeFile(filepath, new Uint8Array(buffer));
-
   const publicUrlPath = toPublicUploadUrl(relativeDest, filename);
+  const key = toUploadStorageKey(publicUrlPath);
+  if (!key) {
+    throw new Error("Chemin de destination invalide");
+  }
+
+  // 5. Envoi sur Cloudflare R2
+  await putObject(key, new Uint8Array(buffer), file.type);
 
   return {
     filename,
@@ -195,13 +191,9 @@ export async function uploadFromFormData(
  * Supprime un fichier uploadé.
  */
 export async function deleteUploadedFile(filepath: string): Promise<void> {
-  const { unlink } = await import("fs/promises");
-  const normalized = filepath.trim().startsWith("/")
-    ? filepath.trim()
-    : `/${filepath.trim().replace(/^\/+/, "")}`;
-  const abs = resolveSafeUploadsDiskPath(normalized);
-  if (!abs || !existsSync(abs)) {
+  const key = toUploadStorageKey(filepath);
+  if (!key) {
     return;
   }
-  await unlink(abs);
+  await deleteObject(key);
 }

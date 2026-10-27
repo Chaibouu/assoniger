@@ -5,7 +5,7 @@ import { AssociationStatus, LegalStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getLegacyGeoIdsForRegion } from "@/lib/geo-legacy";
 import { NIGER_REGION_CODES, type NigerRegionCode } from "@/lib/geo-labels";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { logAdminHistory } from "@/lib/admin-history";
 
@@ -74,7 +74,7 @@ async function getAuthenticatedUser(req: NextRequest) {
     return { error: NextResponse.json({ error: "Authentification requise" }, { status: 401 }) };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),
@@ -207,8 +207,16 @@ export async function PATCH(
       regionCode,
       departementId: patchDepartementId,
       communeId: patchCommuneId,
+      // Champs réservés à l'administration (non modifiables par le compte association)
+      registrationNumber,
+      adminNotes,
+      verifiedAt,
+      rejectedReason,
+      userId,
       ...updateData
     } = parsed.data;
+
+    const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
 
     const geoScalars: {
       regionId?: string;
@@ -302,10 +310,15 @@ export async function PATCH(
       data: {
         ...updateData,
         ...geoScalars,
-        ...(user.role === "ADMIN" || user.role === "SUPER_ADMIN"
+        ...(isAdmin
           ? {
               status,
               verifiedById,
+              registrationNumber,
+              adminNotes,
+              verifiedAt,
+              rejectedReason,
+              userId,
             }
           : {}),
         ...(domainIds
@@ -329,7 +342,7 @@ export async function PATCH(
       },
     });
 
-    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
+    if (isAdmin) {
       await logAdminHistory({
         userId: user.id,
         action: "UPDATE",

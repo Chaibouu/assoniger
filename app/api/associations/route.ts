@@ -5,7 +5,7 @@ import { AssociationStatus, DocumentType, LegalStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getLegacyGeoIdsForRegion } from "@/lib/geo-legacy";
 import { NIGER_REGION_CODES, type NigerRegionCode } from "@/lib/geo-labels";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { logAdminHistory } from "@/lib/admin-history";
 
@@ -69,7 +69,7 @@ async function getAuthenticatedUser(req: NextRequest) {
     return { error: NextResponse.json({ error: "Authentification requise" }, { status: 401 }) };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),

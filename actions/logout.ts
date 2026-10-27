@@ -1,53 +1,46 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { refreshUserToken } from "@/lib/user";
+import { db } from "@/lib/db";
+import { callRoute } from "@/lib/internal-route";
+import { hashRefreshToken } from "@/lib/session";
+import { POST as logoutRoute } from "@/app/api/auth/logout/route";
 
 export const logout = async () => {
+  const cookieStore = await cookies();
+
+  // Récupérer les tokens d'accès, de rafraîchissement et d'impersonation
+  const accessToken = cookieStore.get("accessToken")?.value;
+  const refreshToken = cookieStore.get("refreshToken")?.value;
+  const impersonationToken = cookieStore.get("impersonationToken")?.value;
+
   try {
-    const cookieStore = await cookies();
-
-    // Récupérer les tokens d'accès et de rafraîchissement
-    let accessToken = cookieStore.get("accessToken")?.value;
-    const refreshToken = cookieStore.get("refreshToken")?.value;
-
-    if (!accessToken && refreshToken) {
-      // Tenter de rafraîchir l'accessToken si le refreshToken est disponible
-      const refreshResponse = await refreshUserToken(refreshToken);
-      if (refreshResponse.accessToken) {
-        accessToken = refreshResponse.accessToken; // Utiliser le nouveau token
-      }
+    // Révocation de toutes les sessions du compte (si l'access token est encore valide)
+    if (accessToken) {
+      await callRoute(logoutRoute, "/api/auth/logout", { body: { token: accessToken } });
     }
 
-    // Si aucun accessToken n'est présent même après la tentative de rafraîchissement
-    if (!accessToken) {
-      return { error: "Impossible de se déconnecter, token d'accès manquant." };
+    // Révocation de la session courante via le refresh token (fonctionne même si l'access token a expiré)
+    if (refreshToken) {
+      await db.session.deleteMany({
+        where: { refreshToken: hashRefreshToken(refreshToken) },
+      });
     }
 
-    // Appeler l'API logout et envoyer le token d'accès
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/logout`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: accessToken }),
-      }
-    );
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      // Afficher l'erreur envoyée par le backend
-      return { error: result.error || "Erreur lors de la déconnexion" };
+    // Fin d'une éventuelle session d'audit
+    if (impersonationToken) {
+      await db.session.deleteMany({
+        where: { sessionToken: impersonationToken, isImpersonation: true },
+      });
     }
-
-    // Supprimer les cookies d'accès et de rafraîchissement
-    cookieStore.set("accessToken", "", { maxAge: -1, path: "/" });
-    cookieStore.set("refreshToken", "", { maxAge: -1, path: "/" });
-
-    return { success: "Déconnexion réussie" };
   } catch (error) {
     console.error("Erreur dans logoutAction:", error);
-    return { error: "Erreur serveur" };
+  } finally {
+    // Les cookies sont toujours supprimés : l'utilisateur est déconnecté côté navigateur quoi qu'il arrive
+    cookieStore.delete("accessToken");
+    cookieStore.delete("refreshToken");
+    cookieStore.delete("impersonationToken");
   }
+
+  return { success: "Déconnexion réussie" };
 };

@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { AssociationInfoEditForm } from "@/components/dashboard/profile/AssociationInfoEditForm";
 import { AssociationPasswordForm } from "@/components/dashboard/profile/AssociationPasswordForm";
+import { TwoFactorSettings } from "@/components/dashboard/TwoFactorSettings";
 
 const roleLabelFr: Record<UserRole, string> = {
   [UserRole.ADMIN]: "Administrateur",
@@ -126,6 +127,8 @@ export default async function DashboardProfilePage() {
 
   if (!sessionUser?.id) redirect("/auth/login");
 
+  // Session d'audit (impersonation) : la 2FA du compte ne peut pas être modifiée
+  const isImpersonationSession = "isImpersonation" in result && Boolean(result.isImpersonation);
   const isAssociationRole = sessionUser.role === UserRole.ASSOCIATION;
 
   const [profile, regions, departements, communes] = await Promise.all([
@@ -342,6 +345,10 @@ export default async function DashboardProfilePage() {
             />
           </Section>
 
+          <Section title="Double authentification" icon={Lock}>
+            <TwoFactorSettings enabled={profile.isTwoFactorEnabled} readOnly={isImpersonationSession} />
+          </Section>
+
           {/* Modification du mot de passe */}
           <AssociationPasswordForm />
         </>
@@ -398,6 +405,10 @@ export default async function DashboardProfilePage() {
                 )
               }
             />
+          </Section>
+
+          <Section title="Double authentification" icon={Lock}>
+            <TwoFactorSettings enabled={profile.isTwoFactorEnabled} readOnly={isImpersonationSession} />
           </Section>
 
           {/* Rôle */}

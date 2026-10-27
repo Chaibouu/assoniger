@@ -1,60 +1,72 @@
+// Pino est remplacé par un logger factice pour vérifier les appels sans sortie réelle.
+// L'instance est créée dans la factory (jest.mock est remonté avant les déclarations).
+jest.mock('pino', () => {
+  const instance = {
+    trace: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    fatal: jest.fn(),
+  }
+  const factory = Object.assign(jest.fn(() => instance), {
+    stdTimeFunctions: { isoTime: jest.fn() },
+    __instance: instance,
+  })
+  return { __esModule: true, default: factory, __instance: instance }
+})
+
 import { logger } from '@/lib/logger'
 
-// Mock console methods
-const mockConsoleError = jest.spyOn(console, 'error').mockImplementation()
-const mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation()
-const mockConsoleInfo = jest.spyOn(console, 'info').mockImplementation()
-const mockConsoleDebug = jest.spyOn(console, 'debug').mockImplementation()
+const mockPino = (jest.requireMock('pino') as { __instance: Record<string, jest.Mock> })
+  .__instance
 
 describe('Logger', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
-  afterAll(() => {
-    mockConsoleError.mockRestore()
-    mockConsoleWarn.mockRestore()
-    mockConsoleInfo.mockRestore()
-    mockConsoleDebug.mockRestore()
-  })
-
-  it('should log error messages', () => {
+  it('transmet les niveaux standards à pino', () => {
     logger.error('Test error')
-    expect(mockConsoleError).toHaveBeenCalled()
-  })
-
-  it('should log warning messages', () => {
     logger.warn('Test warning')
-    expect(mockConsoleWarn).toHaveBeenCalled()
-  })
-
-  it('should log info messages', () => {
     logger.info('Test info')
-    expect(mockConsoleInfo).toHaveBeenCalled()
-  })
-
-  it('should log debug messages in development', () => {
     logger.debug('Test debug')
-    expect(mockConsoleDebug).toHaveBeenCalled()
+
+    expect(mockPino.error).toHaveBeenCalledWith('Test error')
+    expect(mockPino.warn).toHaveBeenCalledWith('Test warning')
+    expect(mockPino.info).toHaveBeenCalledWith('Test info')
+    expect(mockPino.debug).toHaveBeenCalledWith('Test debug')
   })
 
-  it('should log with context', () => {
-    logger.info('Test with context', { userId: '123', action: 'login' })
-    expect(mockConsoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('Test with context')
+  it('accepte un contexte structuré', () => {
+    logger.info({ userId: '123', action: 'login' }, 'Test with context')
+    expect(mockPino.info).toHaveBeenCalledWith(
+      { userId: '123', action: 'login' },
+      'Test with context'
     )
   })
 
-  it('should log HTTP requests', () => {
+  it('journalise les requêtes HTTP', () => {
     logger.logRequest('GET', '/api/users', 200, 150)
-    expect(mockConsoleInfo).toHaveBeenCalledWith(
-      expect.stringContaining('HTTP Request'),
-      expect.any(Object)
+    expect(mockPino.info).toHaveBeenCalledWith(
+      { method: 'GET', path: '/api/users', statusCode: 200, durationMs: 150 },
+      'HTTP Request'
     )
   })
 
-  it('should log auth actions', () => {
+  it("masque l'email dans les logs d'authentification", () => {
     logger.logAuth('login', 'user123', 'test@example.com')
-    expect(mockConsoleInfo).toHaveBeenCalled()
+    expect(mockPino.info).toHaveBeenCalledWith(
+      { action: 'login', userId: 'user123', email: 'te***@example.com' },
+      'Auth: login'
+    )
+  })
+
+  it('journalise les événements de sécurité en warn', () => {
+    logger.logSecurity('RATE_LIMIT', { ip: '1.2.3.4' })
+    expect(mockPino.warn).toHaveBeenCalledWith(
+      { event: 'RATE_LIMIT', ip: '1.2.3.4' },
+      'Security: RATE_LIMIT'
+    )
   })
 })

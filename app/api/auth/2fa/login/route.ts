@@ -15,12 +15,13 @@ import { NextResponse, userAgent } from "next/server";
 import crypto from "crypto";
 import { authenticator } from "otplib";
 import { db } from "@/lib/db";
-import { getFullTokenPayload, createEncryptedJWT } from "@/lib/tokens";
+import { getPurposeTokenPayload, createEncryptedJWT } from "@/lib/tokens";
 import { createSession } from "@/data/session";
 import { getGeoInfo, getClientIP } from "@/lib/geo";
 import { audit } from "@/lib/audit";
 import { sendLoginNotificationEmail } from "@/lib/mail";
 import appConfig from "@/settings";
+import { rateLimitRedis2fa } from "@/lib/rateLimit";
 import type { NextRequest } from "next/server";
 
 function hashRefreshToken(token: string): string {
@@ -39,9 +40,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── Valider le tempToken ─────────────────────────────────────────────────
-    const payload = getFullTokenPayload(tempToken);
+    const payload = getPurposeTokenPayload(tempToken, "2fa_challenge");
 
-    if (!payload?.userId || payload.purpose !== "2fa_challenge") {
+    if (!payload?.userId) {
       return NextResponse.json(
         { error: "Token de challenge 2FA invalide ou expiré" },
         { status: 401 }
@@ -66,6 +67,10 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // Anti brute-force du code TOTP : limite par compte, quelle que soit l'IP
+    const rlResponse = await rateLimitRedis2fa(user.id);
+    if (rlResponse) return rlResponse;
 
     // ─── Vérifier le code TOTP ────────────────────────────────────────────────
     const isValid = authenticator.verify({
@@ -93,10 +98,15 @@ export async function POST(req: NextRequest) {
       await db.session.deleteMany({ where: { userId: user.id } });
     }
 
-    const accessToken = createEncryptedJWT({ userId: user.id, email: user.email }, "1h");
+    const sessionId = crypto.randomUUID();
+    const accessToken = createEncryptedJWT(
+      { userId: user.id, email: user.email, sid: sessionId },
+      "1h"
+    );
     const rawRefreshToken = crypto.randomBytes(64).toString("hex");
 
     await createSession({
+      id: sessionId,
       userId: user.id,
       sessionToken: accessToken,
       refreshToken: hashRefreshToken(rawRefreshToken),

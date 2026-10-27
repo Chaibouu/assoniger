@@ -20,7 +20,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 const menuItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
-  { href: "/profile",   icon: UserCircle,      label: "Mon profil" },
+  { href: "/dashboard/profile", icon: UserCircle, label: "Mon profil" },
   { href: "/dashboard/settings", icon: Settings, label: "Paramètres" },
 ];
 

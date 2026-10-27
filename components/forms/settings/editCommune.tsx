@@ -42,7 +42,7 @@ function DepartementSelectInner({
   isPending,
   departementsLength,
 }: {
-  field: ControllerRenderProps<AddCommuneValues, "departementId">["field"];
+  field: ControllerRenderProps<AddCommuneValues, "departementId">;
   departementOptions: GeoSelectOption[];
   selectClassNames: ReturnType<typeof geoReactSelectClassNames>;
   departementIdError: boolean;

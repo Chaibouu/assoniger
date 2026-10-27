@@ -1,6 +1,8 @@
 "use server";
 
 import { resetPasswordSchema } from "@/schemas";
+import { callRoute } from "@/lib/internal-route";
+import { POST as resetPasswordRoute } from "@/app/api/auth/reset-password/route";
 
 export const resetPassword = async (data: {
   token: string;
@@ -19,19 +21,14 @@ export const resetPassword = async (data: {
   const { token, newPassword } = validatedData.data;
 
   try {
-    // Appeler l'API reset-password
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/reset-password`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, newPassword }),
-      }
+    // Appel direct de la route reset-password (IP réelle du visiteur transmise)
+    const { ok, data: result } = await callRoute<{ error?: string }>(
+      resetPasswordRoute,
+      "/api/auth/reset-password",
+      { body: { token, newPassword } }
     );
 
-    const result = await response.json();
-
-    if (!response.ok) {
+    if (!ok) {
       // Afficher l'erreur envoyée par le backend
       return {
         error:

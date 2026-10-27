@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z, type ZodIssue } from "zod";
 import { db } from "@/lib/db";
-import { getFullTokenPayload } from "@/lib/tokens";
+import { verifyAccessToken } from "@/lib/tokens";
 import { getUserById } from "@/data/user";
 import { logAdminHistory } from "@/lib/admin-history";
-import { ASSOCIATION_MEMBER_SIMPLE_POSITION } from "@/lib/association-member-kind";
+import {
+  ASSOCIATION_MEMBER_SIMPLE_POSITION,
+  isReservedMemberPosition,
+} from "@/lib/association-member-kind";
 
 const CreateMemberSchema = z
   .object({
@@ -23,6 +26,12 @@ const CreateMemberSchema = z
         ctx.addIssue({
           code: "custom",
           message: "Le poste au bureau est requis (min. 2 caractères)",
+          path: ["position"],
+        });
+      } else if (isReservedMemberPosition(val.position ?? "")) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Ce poste est réservé",
           path: ["position"],
         });
       }
@@ -53,7 +62,7 @@ async function getAuthenticatedUser(req: NextRequest) {
     };
   }
 
-  const payload = getFullTokenPayload(token);
+  const payload = await verifyAccessToken(token);
   if (!payload?.userId) {
     return {
       error: NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 }),

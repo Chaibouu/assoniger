@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { getUserByEmail } from "@/data/user";
 import { generateVerificationToken } from "@/lib/tokens";
 import { sendVerificationEmail } from "@/lib/mail";
 import { ResendVerificationSchema } from "@/schemas";
+import { rateLimitRedisEmailTarget } from "@/lib/rateLimit";
 
-export async function POST(req: Request) {
+// Réponse identique que le compte existe ou non (pas d'énumération des comptes)
+const GENERIC_MESSAGE =
+  "Si un compte non vérifié existe pour cette adresse, un nouvel email de vérification a été envoyé.";
+
+export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
 
@@ -27,47 +33,25 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // Anti email-bombing par adresse destinataire. Pas de limite par IP ici : la route est
+    // appelée par une Server Action, donc depuis le serveur (même IP pour tous les utilisateurs).
+    const rlResponse = await rateLimitRedisEmailTarget(parsedData.data.email);
+    if (rlResponse) return rlResponse;
+
     // Recherche de l'utilisateur par email
-    const user = await getUserByEmail(email);
+    const user = await getUserByEmail(parsedData.data.email);
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Utilisateur non trouvé" },
-        { status: 404 }
+    // Envoi uniquement pour un compte existant, jamais vérifié
+    // (un compte désactivé par l'administrateur a déjà un email vérifié)
+    if (user && !user.emailVerified) {
+      const verificationToken = await generateVerificationToken(
+        user.email as string
       );
+      await sendVerificationEmail(user.email as string, verificationToken);
     }
 
-    // Si l'utilisateur est désactivé par l'administrateur (et non juste pour cause de non-vérification)
-    if (!user.isActive && user.emailVerified) {
-      return NextResponse.json(
-        {
-          error:
-            "Votre compte est désactivé. Veuillez contacter l'administrateur.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // Si l'utilisateur a déjà vérifié son email
-    if (user.emailVerified) {
-      return NextResponse.json(
-        { message: "Votre email est déjà vérifié." },
-        { status: 200 }
-      );
-    }
-
-    // Générer un nouveau token de vérification
-    const verificationToken = await generateVerificationToken(
-      user.email as string
-    );
-
-    // Envoyer un nouvel email de vérification
-    await sendVerificationEmail(user.email as string, verificationToken);
-
-    return NextResponse.json(
-      { message: "Un nouvel email de vérification a été envoyé." },
-      { status: 200 }
-    );
+    return NextResponse.json({ message: GENERIC_MESSAGE }, { status: 200 });
   } catch (error) {
     console.error("Erreur lors de l'envoi de l'email de vérification :", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

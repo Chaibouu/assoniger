@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { DocumentType, LegalStatus, UserRole } from "@prisma/client";
+import { AssociationStatus, DocumentType, LegalStatus, UserRole } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { getUserByEmail } from "@/data/user";
@@ -11,8 +12,9 @@ import { sendVerificationEmail } from "@/lib/mail";
 import { getClientIP } from "@/lib/geo";
 import { rateLimitRedisEmail } from "@/lib/rateLimit";
 import { associationRegistrationUploadRelative } from "@/lib/association-upload-paths";
-import { uploadFile } from "@/lib/upload";
-import { extractPdfTextForArreteReference, isArreteReferenceFoundInPdfText } from "@/lib/arrete-pdf-validate";
+import { deleteUploadedFile, uploadFile } from "@/lib/upload";
+import { verifyArreteReference } from "@/lib/arrete-pdf-validate";
+import { ASSOCIATION_MEMBER_PENDING_POSITION } from "@/lib/association-member-kind";
 
 const registerSchema = z.discriminatedUnion("accountType", [
   z.object({
@@ -22,7 +24,11 @@ const registerSchema = z.discriminatedUnion("accountType", [
     password: z.string().min(8, "Le mot de passe doit comporter au moins 8 caractères"),
     associationName: z.string().min(3, "Le nom de l'association est requis"),
     presidentName: z.string().min(3, "Le nom du president est requis"),
-    recognitionOrder: z.string().optional(),
+    recognitionOrder: z
+      .string()
+      .trim()
+      .min(2, "Le numéro de l'arrêté de reconnaissance est requis")
+      .refine((v) => /\d{3,}/.test(v), "Le numéro de l'arrêté doit contenir au moins 3 chiffres"),
     location: z.string().min(2, "La localisation est requise"),
     activityDomain: z.string().min(2, "Le domaine d'activite est requis"),
     prioritySectors: z.string().min(2, "Les secteurs prioritaires sont requis"),
@@ -161,15 +167,18 @@ export async function POST(req: NextRequest) {
       });
 
       const recognitionFile = formData.get("recognitionFile");
-      const logoFile = formData.get("logoFile");
+      // Logo facultatif : un champ fichier vide arrive comme File de taille 0
+      const rawLogo = formData.get("logoFile");
+      const logoFile = rawLogo instanceof File && rawLogo.size > 0 ? rawLogo : null;
       if (!(recognitionFile instanceof File)) {
         return NextResponse.json(
           { error: "Le document de l'arrêté de reconnaissance est requis" },
           { status: 400 }
         );
       }
+
       const validLogoTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-      if (logoFile instanceof File && !validLogoTypes.includes(logoFile.type)) {
+      if (logoFile && !validLogoTypes.includes(logoFile.type)) {
         return NextResponse.json(
           { error: "Le logo doit être une image (jpg, png, webp ou gif)" },
           { status: 400 }
@@ -182,29 +191,31 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const recognitionOrderTrim = (data.recognitionOrder ?? "").trim();
-      if (recognitionOrderTrim.length >= 2) {
-        try {
-          const pdfBytes = new Uint8Array(await recognitionFile.arrayBuffer());
-          const pdfText = await extractPdfTextForArreteReference(pdfBytes, recognitionOrderTrim);
-          if (
-            !pdfText.trim() ||
-            !isArreteReferenceFoundInPdfText(recognitionOrderTrim, pdfText)
-          ) {
-            return NextResponse.json(
-              {
-                error:
-                  "Le numéro de référence de l'arrêté ne correspond pas au texte détecté dans le PDF (ou le PDF ne contient pas de texte extractible). Vérifiez la référence et le document.",
-              },
-              { status: 400 }
-            );
-          }
-        } catch {
+      // Numéro obligatoire : il doit toujours être retrouvé dans le PDF (même règle que le formulaire ;
+      // l'analyse déjà faite pendant la saisie est réutilisée via le cache par empreinte)
+      const recognitionOrderTrim = data.recognitionOrder.trim();
+      try {
+        const pdfBytes = new Uint8Array(await recognitionFile.arrayBuffer());
+        const verification = await verifyArreteReference({
+          data: pdfBytes,
+          reference: recognitionOrderTrim,
+        });
+        if (verification.status !== "found") {
           return NextResponse.json(
-            { error: "Impossible d'analyser le PDF de l'arrêté. Vérifiez le fichier ou réessayez." },
+            {
+              error:
+                verification.status === "near"
+                  ? `Le numéro saisi ne correspond pas au document, qui indique « ${verification.suggestion} ».`
+                  : "Le numéro de l'arrêté n'a pas été retrouvé dans le PDF. Vérifiez le numéro et le document.",
+            },
             { status: 400 }
           );
         }
+      } catch {
+        return NextResponse.json(
+          { error: "Impossible d'analyser le PDF de l'arrêté. Vérifiez le fichier ou réessayez." },
+          { status: 400 }
+        );
       }
 
       const communeGeo = await db.commune.findFirst({
@@ -230,105 +241,114 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      let createdAssociationId = "";
-      await db.$transaction(async (tx) => {
-        console.info("[PUBLIC_REGISTER][ASSOCIATION] Création utilisateur association", {
-          email: data.email,
-          role: UserRole.ASSOCIATION,
-        });
-        const user = await tx.user.create({
-          data: {
-            name: data.name,
-            email: data.email,
-            password: hashedPassword,
-            role: UserRole.ASSOCIATION,
-            isActive: false,
-            emailVerified: null,
+      // Compte + association + président en UNE seule requête (écriture imbriquée, atomique par nature) :
+      // évite la transaction interactive de 3 allers-retours qui expirait avec la latence de la base.
+      console.info("[PUBLIC_REGISTER][ASSOCIATION] Création du compte, de l'association et du président");
+      const created = await db.association.create({
+        data: {
+          name: data.associationName,
+          description: `Domaine d'activite: ${data.activityDomain}. Secteurs prioritaires: ${data.prioritySectors}.`,
+          contactEmail: data.email,
+          contactPhone: data.contactPhone,
+          address: data.location,
+          receiptNumber: data.recognitionOrder,
+          legalStatus: LegalStatus.OTHER,
+          region: { connect: { id: data.regionId } },
+          departement: { connect: { id: data.departementId } },
+          commune: { connect: { id: data.communeId } },
+          user: {
+            create: {
+              name: data.name,
+              email: data.email,
+              password: hashedPassword,
+              role: UserRole.ASSOCIATION,
+              isActive: false,
+              emailVerified: null,
+            },
           },
-        });
-        console.info("[PUBLIC_REGISTER][ASSOCIATION] Utilisateur créé", {
-          userId: user.id,
-          email: user.email,
-        });
-
-        console.info("[PUBLIC_REGISTER][ASSOCIATION] Création association");
-        const association = await tx.association.create({
-          data: {
-            name: data.associationName,
-            description: `Domaine d'activite: ${data.activityDomain}. Secteurs prioritaires: ${data.prioritySectors}.`,
-            contactEmail: data.email,
-            contactPhone: data.contactPhone,
-            address: data.location,
-            receiptNumber: data.recognitionOrder,
-            legalStatus: LegalStatus.OTHER,
-            regionId: data.regionId,
-            departementId: data.departementId,
-            communeId: data.communeId,
-            userId: user.id,
+          members: {
+            create: {
+              fullName: data.presidentName,
+              position: "President",
+              isPrimary: true,
+            },
           },
-        });
-        createdAssociationId = association.id;
-        console.info("[PUBLIC_REGISTER][ASSOCIATION] Association créée", {
-          associationId: association.id,
-          associationName: association.name,
-        });
-
-        console.info("[PUBLIC_REGISTER][ASSOCIATION] Création du président");
-        await tx.associationMember.create({
-          data: {
-            associationId: association.id,
-            fullName: data.presidentName,
-            position: "President",
-            isPrimary: true,
-          },
-        });
-        console.info("[PUBLIC_REGISTER][ASSOCIATION] Président créé");
+        },
+        select: { id: true, userId: true },
+      });
+      const createdAssociationId = created.id;
+      const createdUserId = created.userId ?? "";
+      console.info("[PUBLIC_REGISTER][ASSOCIATION] Association créée", {
+        associationId: createdAssociationId,
+        userId: createdUserId,
       });
       const destination = associationRegistrationUploadRelative(createdAssociationId);
-      const uploadPromises: Promise<{ path: string }>[] = [
+      const uploads = await Promise.allSettled([
         uploadFile(recognitionFile, {
           destination,
           allowedTypes: ["application/pdf"],
           maxSize: 10 * 1024 * 1024,
         }),
-      ];
-      if (logoFile instanceof File) {
-        uploadPromises.push(
-          uploadFile(logoFile, {
-            destination,
-            allowedTypes: validLogoTypes,
-            maxSize: 10 * 1024 * 1024,
-          })
+        ...(logoFile
+          ? [
+              uploadFile(logoFile, {
+                destination,
+                allowedTypes: validLogoTypes,
+                maxSize: 10 * 1024 * 1024,
+              }),
+            ]
+          : []),
+      ]);
+      const uploadedPaths = uploads.flatMap((u) => (u.status === "fulfilled" ? [u.value.path] : []));
+
+      try {
+        const [recognitionResult, logoResult] = uploads;
+        if (recognitionResult.status === "rejected") throw recognitionResult.reason;
+        if (logoResult?.status === "rejected") throw logoResult.reason;
+        const recognitionUpload = recognitionResult.value;
+        const logoUpload = logoResult?.status === "fulfilled" ? logoResult.value : null;
+
+        await db.$transaction([
+          db.association.update({
+            where: { id: createdAssociationId },
+            data: {
+              receiptFileUrl: recognitionUpload.path,
+              ...(logoUpload && { logoUrl: logoUpload.path }),
+            },
+          }),
+          db.associationDocument.create({
+            data: {
+              associationId: createdAssociationId,
+              documentType: DocumentType.RECEIPT,
+              fileName: recognitionFile.name || "arrete-reconnaissance.pdf",
+              fileUrl: recognitionUpload.path,
+              fileSize: recognitionFile.size || null,
+              mimeType: recognitionFile.type || "application/pdf",
+              isVerified: false,
+            },
+          }),
+        ]);
+        console.info("[PUBLIC_REGISTER][ASSOCIATION] Uploads enregistrés", {
+          associationId: createdAssociationId,
+          destination,
+          recognitionPath: recognitionUpload.path,
+          logoPath: logoUpload?.path ?? null,
+        });
+      } catch (uploadError) {
+        // Annulation complète : sans documents, le dossier est inexploitable et l'email resterait bloqué
+        console.error("[PUBLIC_REGISTER][ASSOCIATION] Échec des uploads, annulation de l'inscription", uploadError);
+        await Promise.allSettled(uploadedPaths.map((p) => deleteUploadedFile(p)));
+        await db.association
+          .delete({ where: { id: createdAssociationId } })
+          .catch((e) => console.error("[PUBLIC_REGISTER] Annulation association impossible", e));
+        await db.user
+          .delete({ where: { id: createdUserId } })
+          .catch((e) => console.error("[PUBLIC_REGISTER] Annulation utilisateur impossible", e));
+        return NextResponse.json(
+          { error: "L'envoi des documents a échoué. Aucune inscription n'a été enregistrée, veuillez réessayer." },
+          { status: 502 }
         );
       }
-
-      const [recognitionUpload, logoUpload] = await Promise.all(uploadPromises);
-
-      await db.association.update({
-        where: { id: createdAssociationId },
-        data: {
-          receiptFileUrl: recognitionUpload.path,
-          ...(logoUpload ? { logoUrl: logoUpload.path } : {}),
-        },
-      });
-
-      await db.associationDocument.create({
-        data: {
-          associationId: createdAssociationId,
-          documentType: DocumentType.RECEIPT,
-          fileName: recognitionFile.name || "arrete-reconnaissance.pdf",
-          fileUrl: recognitionUpload.path,
-          fileSize: recognitionFile.size || null,
-          mimeType: recognitionFile.type || "application/pdf",
-          isVerified: false,
-        },
-      });
-      console.info("[PUBLIC_REGISTER][ASSOCIATION] Uploads enregistrés", {
-        associationId: createdAssociationId,
-        destination,
-        recognitionPath: recognitionUpload.path,
-        logoPath: logoUpload.path,
-      });
       console.info("[PUBLIC_REGISTER][ASSOCIATION] Transaction terminée avec succès", {
         email: data.email,
       });
@@ -337,8 +357,13 @@ export async function POST(req: NextRequest) {
         email: data.email,
         associationId: data.associationId,
       });
+      // Adhésion possible uniquement à une association validée par la modération
       const association = await db.association.findFirst({
-        where: { id: data.associationId, isDeleted: false },
+        where: {
+          id: data.associationId,
+          isDeleted: false,
+          status: { in: [AssociationStatus.ACTIVE, AssociationStatus.VERIFIED] },
+        },
         select: { id: true, name: true },
       });
 
@@ -350,54 +375,51 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Association introuvable" }, { status: 404 });
       }
 
-      const user = await db.user.create({
-        data: {
-          name: data.name,
-          email: data.email,
-          password: hashedPassword,
-          role: UserRole.MEMBER,
-          isActive: false,
-          emailVerified: null,
-        },
-      });
-      console.info("[PUBLIC_REGISTER][MEMBER] Utilisateur membre créé", {
-        userId: user.id,
-        email: user.email,
-      });
-
-      await db.associationMember.create({
-        data: {
-          associationId: association.id,
-          fullName: data.name,
-          email: data.email,
-          position: "MEMBER_PENDING",
-          isPrimary: false,
-        },
-      });
-      console.info("[PUBLIC_REGISTER][MEMBER] Demande membre créée dans associationMember", {
-        associationId: association.id,
-        email: data.email,
-      });
-
-      await db.activityLog.create({
-        data: {
-          associationId: association.id,
-          userId: user.id,
-          action: "JOIN_REQUEST",
-          entity: "AssociationMembership",
-          entityId: user.id,
-          newValues: {
-            userName: data.name,
-            userEmail: data.email,
-            requestedRole: "MEMBER",
-            message:
-              "Demande de creation de compte membre envoyee depuis le formulaire public.",
+      // Compte + demande d'adhésion + journal : tout ou rien. Transaction groupée (un seul lot envoyé
+      // à la base) plutôt qu'interactive : pas de délai qui expire avec la latence réseau.
+      // L'id du compte est généré ici pour être référencé dans le journal du même lot.
+      const userId = randomUUID();
+      await db.$transaction([
+        db.user.create({
+          data: {
+            id: userId,
+            name: data.name,
+            email: data.email,
+            password: hashedPassword,
+            role: UserRole.MEMBER,
+            isActive: false,
+            emailVerified: null,
           },
-        },
-      });
-      console.info("[PUBLIC_REGISTER][MEMBER] Activité JOIN_REQUEST créée", {
+        }),
+        db.associationMember.create({
+          data: {
+            associationId: association.id,
+            fullName: data.name,
+            email: data.email,
+            position: ASSOCIATION_MEMBER_PENDING_POSITION,
+            isPrimary: false,
+          },
+        }),
+        db.activityLog.create({
+          data: {
+            associationId: association.id,
+            userId,
+            action: "JOIN_REQUEST",
+            entity: "AssociationMembership",
+            entityId: userId,
+            newValues: {
+              userName: data.name,
+              userEmail: data.email,
+              requestedRole: "MEMBER",
+              message:
+                "Demande de creation de compte membre envoyee depuis le formulaire public.",
+            },
+          },
+        }),
+      ]);
+      console.info("[PUBLIC_REGISTER][MEMBER] Compte membre et demande d'adhésion créés", {
         associationId: association.id,
-        userId: user.id,
+        userId,
       });
     }
 

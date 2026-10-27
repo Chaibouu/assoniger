@@ -3,7 +3,9 @@ import appConfig from "@/settings";
 const AuthLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div
-      className="relative h-dvh w-full overflow-hidden bg-muted/40"
+      // overflow-clip (et non hidden) : ce conteneur ne doit jamais défiler, même quand le focus
+      // atteint un élément hors écran — sinon le contenu sort de la vue sans retour possible.
+      className="relative h-dvh w-full overflow-clip bg-muted/40"
       style={{
         backgroundColor: `${appConfig.primaryColor}08`,
       }}

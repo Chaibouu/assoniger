@@ -1,31 +1,28 @@
 "use server";
 
+import { callRoute } from "@/lib/internal-route";
+import { POST as verifyRoute } from "@/app/api/auth/verify/route";
+
 export async function verifyUserToken(token: string) {
   try {
     // Vérifier si le token est présent
     if (!token) {
       return { error: "Le token est manquant" };
     }
-    // Envoyer une requête à /api/auth/verify avec le token
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/verify`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      }
+
+    // Appel direct de la route /api/auth/verify
+    const { ok, data } = await callRoute<{ error?: string; message?: string }>(
+      verifyRoute,
+      "/api/auth/verify",
+      { body: { token } }
     );
 
-    // Vérifier si la requête a réussi
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { error: errorData.error };
+    if (!ok) {
+      return { error: data.error };
     }
 
-    const responseData = await response.json();
-
     // Si le compte a été vérifié avec succès
-    return { success: responseData.message };
+    return { success: data.message };
   } catch (error) {
     console.error("Erreur lors de la vérification du token :", error);
     return { error: "Erreur serveur. Veuillez réessayer plus tard." };

@@ -3,6 +3,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/context/SessionContext";
 import { getUser } from "@/actions/getUser";
+import type { User } from "@/types/user";
 import { generateMetadata as generateAppMetadata } from "@/lib/generateMetadata";
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -43,7 +44,11 @@ export default async function RootLayout({
       <body className={inter.className}>
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
-            <SessionProvider user={user?.user} isImpersonation={isImpersonation}>
+            <SessionProvider
+              // Les champs nullables en base (name, email…) sont gérés côté composants
+              user={((user as { user?: unknown } | null)?.user ?? null) as User | null}
+              isImpersonation={isImpersonation}
+            >
             <NextTopLoader
               color={appConfig.primaryColor}
               showSpinner={false}

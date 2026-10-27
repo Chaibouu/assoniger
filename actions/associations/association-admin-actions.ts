@@ -27,15 +27,19 @@ async function assertCanManageAssociation(associationId: string) {
 
   if (!association) return null;
 
-  if (
-    user.role === UserRole.ASSOCIATION &&
-    association.userId &&
-    association.userId !== user.id
-  ) {
+  if (user.role === UserRole.ASSOCIATION && association.userId !== user.id) {
     redirect("/unauthorized");
   }
 
   return { user };
+}
+
+function isModerationStaff(role: UserRole) {
+  return (
+    role === UserRole.ADMIN ||
+    role === UserRole.SUPER_ADMIN ||
+    role === UserRole.MODERATOR
+  );
 }
 
 export async function deleteAssociationAction(formData: FormData) {
@@ -68,6 +72,11 @@ export async function toggleAssociationStatusAction(formData: FormData) {
 
   const ctx = await assertCanManageAssociation(associationId);
   if (!ctx) return;
+
+  // Le changement de statut relève de la modération : une association ne peut pas s'activer elle-même.
+  if (!isModerationStaff(ctx.user.role as UserRole)) {
+    redirect("/unauthorized");
+  }
 
   const association = await db.association.findFirst({
     where: { ...( { id: associationId, isDeleted: false } as Prisma.AssociationWhereInput) },

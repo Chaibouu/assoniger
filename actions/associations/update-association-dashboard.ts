@@ -86,11 +86,7 @@ export async function updateAssociationDashboardAction(formData: FormData): Prom
   });
   if (!existing) return;
 
-  if (
-    user.role === UserRole.ASSOCIATION &&
-    existing.userId &&
-    existing.userId !== user.id
-  ) {
+  if (user.role === UserRole.ASSOCIATION && existing.userId !== user.id) {
     redirect("/unauthorized");
   }
 

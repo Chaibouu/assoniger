@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import Link from "next/link";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -17,12 +16,27 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/form-error";
 import { FormSuccess } from "@/components/form-success";
 import appConfig from "@/settings";
-import { CheckCircle2, Loader2, XCircle, ChevronLeft, ChevronRight, MapPin, FileText, Building2, Layers, Image as ImageIcon, Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
+import {
+  authBannerGradient,
+  authBrandVars,
+  authInputClass,
+  authLinkClass,
+  authPrimaryButtonClass,
+} from "@/components/auth/auth-theme";
+import {
+  ArrowRight,
+  CheckCircle2,
+  FileText,
+  ImagePlus,
+  Loader2,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import Select, {
   type ClassNamesConfig,
@@ -38,112 +52,283 @@ import {
 
 type GeoSelectOption = { value: string; label: string };
 
-const inputFieldClass =
-  "h-11 min-h-11 rounded-lg border-slate-200 bg-white text-sm shadow-none transition-[border-color,box-shadow] focus-visible:border-[#035740] focus-visible:ring-2 focus-visible:ring-[#035740]/15 placeholder:text-slate-400";
+/* Couleurs de marque en variables CSS (--brand, --brand-ring, --brand-tint, --accent) : voir auth-theme */
+const inputFieldClass = authInputClass;
+
+const fieldHintClass = "text-xs leading-relaxed text-muted-foreground";
 
 const geoSelectClassNames: ClassNamesConfig<GeoSelectOption, false> = {
   control: (state) =>
     cn(
-      "!min-h-11 h-11 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-1 shadow-none",
-      "hover:border-slate-300",
-      state.isFocused && "!border-[#035740] !ring-2 !ring-[#035740]/15"
+      "!min-h-11 h-11 w-full cursor-pointer rounded-lg border border-input bg-white px-1.5 text-sm",
+      "shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-[border-color,box-shadow]",
+      "hover:border-foreground/25",
+      state.isFocused && "border-[var(--brand)] ring-4 ring-[var(--brand-ring)]",
+      state.isDisabled && "cursor-not-allowed opacity-60"
     ),
   menu: () =>
-    "rounded-lg border border-slate-100 bg-white py-1 text-slate-800 shadow-lg",
-  menuList: () => "py-1 max-h-[260px]",
+    cn(
+      "mt-1.5 overflow-hidden rounded-lg border border-border bg-white py-1 text-foreground",
+      "shadow-[0_12px_32px_-8px_rgba(16,24,40,0.18)]"
+    ),
+  menuList: () => "py-1 max-h-[280px]",
   option: (state) =>
     cn(
       "cursor-pointer px-3 py-2 text-sm",
-      state.isFocused && "bg-slate-50 text-slate-900",
-      state.isSelected && "bg-[#035740]/10 font-medium text-[#035740]"
+      state.isFocused && "bg-[var(--brand-tint)]",
+      state.isSelected && "font-semibold text-[var(--brand)]"
     ),
-  placeholder: () => "text-slate-400 text-sm",
-  singleValue: () => "text-slate-800 text-sm",
-  input: () => "text-slate-800 text-sm",
-  indicatorSeparator: () => "bg-slate-200",
-  dropdownIndicator: () => "text-slate-400",
+  placeholder: () => "text-muted-foreground",
+  singleValue: () => "text-foreground",
+  input: () => "text-foreground",
+  indicatorSeparator: () => "bg-border",
+  dropdownIndicator: () => "text-muted-foreground",
 };
 
 const geoSelectStyles: StylesConfig<GeoSelectOption, false> = {
   menuPortal: (base) => ({ ...base, zIndex: 9999 }),
 };
 
+/** Marque « obligatoire » après le libellé (lue « obligatoire » par les lecteurs d'écran). */
+function RequiredMark() {
+  return (
+    <>
+      <span className="ml-0.5 text-[var(--accent)]" aria-hidden>
+        *
+      </span>
+      <span className="sr-only"> (obligatoire)</span>
+    </>
+  );
+}
+
+/** Champ obligatoire : libellé + astérisque (dans un FormField) */
 function ReqLabel({ children }: { children: ReactNode }) {
   return (
-    <FormLabel className="flex items-baseline gap-1 text-sm font-medium text-slate-700">
-      <span className="text-rose-500" aria-hidden>*</span>
-      <span>{children}</span>
+    <FormLabel className="text-sm font-medium leading-snug text-foreground">
+      {children}
+      <RequiredMark />
     </FormLabel>
   );
 }
 
+/** Libellé obligatoire pour champs hors react-hook-form (ex. fichier) */
 function StaticReqLabel({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
   return (
-    <label htmlFor={htmlFor} className="flex items-baseline gap-1 text-sm font-medium text-slate-700">
-      <span className="text-rose-500" aria-hidden>*</span>
-      <span>{children}</span>
+    <label htmlFor={htmlFor} className="block text-sm font-medium leading-snug text-foreground">
+      {children}
+      <RequiredMark />
     </label>
   );
 }
 
+/** Inscription association : identifiants = accès du compte association ; fichiers PDF / logo validés à l’envoi. */
 const registerAssociationSchema = z.object({
   accountType: z.literal("association"),
-  associationName: z.string().trim().min(3, "Le nom de l'association est requis"),
+  associationName: z
+    .string()
+    .trim()
+    .min(3, "Le nom de l'association est requis"),
   email: z.string().trim().email("L'adresse email n'est pas valide"),
   password: z.string().min(8, "Le mot de passe doit comporter au moins 8 caractères"),
-  contactPhone: z.string().trim().min(3, "Le téléphone de contact est requis"),
+  contactPhone: z.string().trim().min(3, "Le téléphone de contact de l'association est requis"),
   presidentName: z.string().trim().min(3, "Le nom du président est requis"),
-  recognitionOrder: z.string().optional(),
+  recognitionOrder: z
+    .string()
+    .trim()
+    .min(2, "Le numéro de l'arrêté de reconnaissance est requis")
+    .refine((v) => /\d{3,}/.test(v), "Le numéro doit contenir au moins 3 chiffres (ex. 000813)"),
   location: z.string().trim().min(2, "La localisation est requise"),
   activityDomain: z.string().trim().min(2, "Le domaine d'activité est requis"),
   prioritySectors: z.string().trim().min(2, "Les secteurs d'activité prioritaires sont requis"),
   regionId: z.string().trim().min(1, "La région est obligatoire"),
   departementId: z.string().trim().min(1, "Le département est obligatoire"),
   communeId: z.string().trim().min(1, "La commune est obligatoire"),
-  confirmPassword: z.string().min(1, "Veuillez confirmer le mot de passe"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Les mots de passe ne correspondent pas",
-  path: ["confirmPassword"],
 });
 
-type RegisterValues = z.infer<typeof registerAssociationSchema>;
+const registerMemberSchema = z.object({
+  accountType: z.literal("member"),
+  name: z.string().trim().min(3, "Le nom du compte est requis"),
+  email: z.string().trim().email("L'adresse email n'est pas valide"),
+  password: z.string().min(8, "Le mot de passe doit comporter au moins 8 caractères"),
+  associationId: z.string().trim().min(1, "Veuillez sélectionner une association"),
+});
 
-const STEPS = [
-  { id: 1, label: "Localisation", icon: MapPin, fields: ["location", "regionId", "departementId", "communeId"] },
-  { id: 2, label: "Reconnaissance légale", icon: FileText, fields: ["presidentName", "recognitionOrder"] },
-  { id: 3, label: "Identification", icon: Building2, fields: ["associationName", "email", "password", "confirmPassword", "contactPhone"] },
-  { id: 4, label: "Activité", icon: Layers, fields: ["activityDomain", "prioritySectors"] },
-  { id: 5, label: "Identité visuelle", icon: ImageIcon, fields: [] },
-] as const;
+const RegisterSchema = z.discriminatedUnion("accountType", [
+  registerAssociationSchema,
+  registerMemberSchema,
+]);
+
+type RegisterValues = z.infer<typeof RegisterSchema>;
+
+/** Groupe de champs encadré, avec titre et courte explication ; grille 2 colonnes dès md. */
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border border-border bg-white p-5 sm:p-7">
+      <header className="mb-6">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
+        {description && (
+          <p className="mt-1.5 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+        )}
+      </header>
+      <div className="grid gap-x-6 gap-y-5 md:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+type ArreteApiResponse = {
+  fileId?: string;
+  status?: "found" | "near" | "not_found";
+  excerpt?: string;
+  suggestion?: string;
+  message?: string;
+  error?: string;
+};
+
+/** Réponse de /api/public/validate-arrete-pdf, sans planter sur un corps non JSON (erreur serveur). */
+async function readArreteResponse(res: Response): Promise<ArreteApiResponse> {
+  const raw = await res.text();
+  try {
+    return raw ? (JSON.parse(raw) as ArreteApiResponse) : {};
+  } catch {
+    return {
+      error:
+        res.status >= 500
+          ? "Le serveur a renvoyé une réponse invalide. Réessayez."
+          : `Réponse inattendue du serveur (code ${res.status}). Réessayez.`,
+    };
+  }
+}
+
+function isAbortError(e: unknown) {
+  return e instanceof Error && e.name === "AbortError";
+}
+
+function formatFileSize(bytes: number) {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} Mo`
+    : `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+}
+
+/** Zone de dépôt de fichier : remplace le champ fichier natif, reste accessible au clavier. */
+function FileDropField({
+  id,
+  accept,
+  file,
+  onFileChange,
+  disabled,
+  icon: Icon,
+  emptyTitle,
+  emptyHint,
+}: {
+  id: string;
+  accept: string;
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+  disabled?: boolean;
+  icon: LucideIcon;
+  emptyTitle: string;
+  emptyHint: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        // relative : l'input masqué (sr-only, absolute) doit rester dans la zone de dépôt. Sinon il se
+        // positionne par rapport au layout (overflow-hidden) et son focus fait défiler toute la page hors écran.
+        "group relative flex cursor-pointer items-center gap-4 border-2 border-dashed p-4 transition-colors",
+        "focus-within:border-[var(--brand)] focus-within:ring-4 focus-within:ring-[var(--brand-ring)]",
+        file
+          ? "border-[color-mix(in_srgb,var(--brand)_40%,transparent)] bg-[var(--brand-tint)]"
+          : "border-border bg-muted/20 hover:border-[color-mix(in_srgb,var(--brand)_45%,transparent)] hover:bg-[var(--brand-tint)]",
+        disabled && "pointer-events-none opacity-60"
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white ring-1 ring-border",
+          "shadow-[0_1px_2px_rgba(16,24,40,0.06)]",
+          file ? "text-[var(--brand)]" : "text-muted-foreground group-hover:text-[var(--brand)]"
+        )}
+      >
+        {file ? <CheckCircle2 className="h-5 w-5" aria-hidden /> : <Icon className="h-5 w-5" aria-hidden />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">
+          {file ? file.name : emptyTitle}
+        </span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {file ? `${formatFileSize(file.size)} · cliquez pour remplacer` : emptyHint}
+        </span>
+      </span>
+      <span
+        className={cn(
+          "hidden shrink-0 rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground sm:inline",
+          "transition-colors group-hover:border-[color-mix(in_srgb,var(--brand)_45%,transparent)]"
+        )}
+      >
+        {file ? "Remplacer" : "Parcourir"}
+      </span>
+      {/* key : remonte l'input quand le fichier est retiré (après envoi) pour vider sa valeur */}
+      <input
+        key={file ? "selected" : "empty"}
+        id={id}
+        type="file"
+        accept={accept}
+        disabled={disabled}
+        className="sr-only left-0 top-0"
+        onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+      />
+    </label>
+  );
+}
 
 type RegisterFormProps = {
+  /** Préchargées côté serveur (page inscription) — évite fetch HTTP bloqué par CSP en prod. */
   initialRegions?: GeoOption[];
 };
 
+/** Référence stable — évite `= []` dans les props qui casse les deps React ([].length !== [].length par référence). */
 const EMPTY_REGIONS: GeoOption[] = [];
 
 export function RegisterForm({ initialRegions = EMPTY_REGIONS }: RegisterFormProps) {
-  const [currentStep, setCurrentStep] = useState(1);
   const [error, setError] = useState<string | undefined>("");
   const [success, setSuccess] = useState<string | undefined>("");
   const [recognitionFile, setRecognitionFile] = useState<File | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
 
   type ArretePdfCheckState =
     | { kind: "idle" }
-    | { kind: "pending" }
+    | { kind: "analyzing" }
     | { kind: "skipped" }
     | { kind: "short_ref" }
     | { kind: "loading" }
-    | { kind: "valid" }
-    | { kind: "invalid" }
+    | { kind: "valid"; excerpt?: string }
+    | { kind: "near"; suggestion: string; excerpt?: string }
+    | { kind: "invalid"; noText?: boolean }
     | { kind: "error"; message?: string };
 
   const [arretePdfCheck, setArretePdfCheck] = useState<ArretePdfCheckState>({ kind: "idle" });
+  /** Pré-analyse du PDF (lancée dès la sélection) : identifiant du document analysé côté serveur */
+  const [pdfAnalysis, setPdfAnalysis] = useState<
+    | { state: "idle" }
+    | { state: "analyzing" }
+    | { state: "ready"; fileId: string; hasText: boolean }
+    | { state: "error"; message: string }
+  >({ state: "idle" });
+  /** Incrémenté pour relancer l'analyse quand le serveur ne l'a plus en cache */
+  const [pdfAnalysisNonce, setPdfAnalysisNonce] = useState(0);
 
   const [geoRegions, setGeoRegions] = useState<GeoOption[]>(initialRegions);
   const [geoDepartements, setGeoDepartements] = useState<GeoOption[]>([]);
@@ -151,11 +336,13 @@ export function RegisterForm({ initialRegions = EMPTY_REGIONS }: RegisterFormPro
   const [geoRegionsLoading, setGeoRegionsLoading] = useState(initialRegions.length === 0);
   const [geoDepartementsLoading, setGeoDepartementsLoading] = useState(false);
   const [geoCommunesLoading, setGeoCommunesLoading] = useState(false);
+  /** Erreur réseau / HTTP / API */
   const [geoErrorMessage, setGeoErrorMessage] = useState<string | null>(null);
+  /** Réponse OK mais liste vide (souvent base non seedée) */
   const [geoEmptyHint, setGeoEmptyHint] = useState<string | null>(null);
 
   const form = useForm<RegisterValues>({
-    resolver: zodResolver(registerAssociationSchema),
+    resolver: zodResolver(RegisterSchema),
     defaultValues: {
       accountType: "association",
       associationName: "",
@@ -170,177 +357,299 @@ export function RegisterForm({ initialRegions = EMPTY_REGIONS }: RegisterFormPro
       regionId: "",
       departementId: "",
       communeId: "",
-      confirmPassword: "",
     },
-    mode: "onChange",
   });
 
   const watchedRegionId = form.watch("regionId");
   const watchedDepartementId = form.watch("departementId");
-  const watchedRecognitionOrder = useWatch({ control: form.control, name: "recognitionOrder", defaultValue: "" });
+  const watchedRecognitionOrder = useWatch({
+    control: form.control,
+    name: "recognitionOrder",
+    defaultValue: "",
+  });
 
+  /* Régions : SSR si initialRegions ; sinon Server Action (pas de GET /api → pas de blocage CSP). */
   useEffect(() => {
     let cancelled = false;
+
+    function applyEmptyHint(listLen: number) {
+      if (listLen === 0) {
+        setGeoEmptyHint(
+          process.env.NODE_ENV === "development"
+            ? "Aucune région en base de données. Lancez : npx prisma db seed"
+            : "Le référentiel géographique est vide. Contactez l’administrateur du site."
+        );
+      } else {
+        setGeoEmptyHint(null);
+      }
+    }
+
     async function loadRegions() {
       if (initialRegions.length > 0) {
         setGeoRegions(initialRegions);
         setGeoRegionsLoading(false);
-        if (initialRegions.length === 0) setGeoEmptyHint("Le référentiel géographique est vide.");
+        setGeoErrorMessage(null);
+        applyEmptyHint(initialRegions.length);
         return;
       }
+
       setGeoRegionsLoading(true);
+      setGeoErrorMessage(null);
+      setGeoEmptyHint(null);
       try {
         const list = await fetchPublicRegions();
         if (cancelled) return;
         setGeoRegions(list);
-        if (list.length === 0) setGeoEmptyHint(process.env.NODE_ENV === "development" ? "Aucune région. Lancez : npx prisma db seed" : "Le référentiel géographique est vide.");
+        applyEmptyHint(list.length);
       } catch {
-        if (!cancelled) { setGeoRegions([]); setGeoErrorMessage("Impossible de charger les régions."); }
+        if (!cancelled) {
+          setGeoRegions([]);
+          setGeoErrorMessage(
+            "Impossible de charger les régions. Vérifiez la base de données ou réessayez."
+          );
+        }
       } finally {
         if (!cancelled) setGeoRegionsLoading(false);
       }
     }
+
     loadRegions();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot SSR au montage uniquement
   }, []);
 
   useEffect(() => {
-    if (!watchedRegionId) { setGeoDepartements([]); setGeoCommunes([]); return; }
+    if (!watchedRegionId) {
+      setGeoDepartements([]);
+      setGeoCommunes([]);
+      setGeoDepartementsLoading(false);
+      return;
+    }
+
     let cancelled = false;
+
     async function loadDepartements() {
       setGeoDepartementsLoading(true);
+      setGeoErrorMessage(null);
       try {
         const list = await fetchPublicDepartements(watchedRegionId);
-        if (!cancelled) setGeoDepartements(list);
+        if (cancelled) return;
+        setGeoDepartements(list);
       } catch {
-        if (!cancelled) { setGeoDepartements([]); setGeoErrorMessage("Impossible de charger les départements."); }
+        if (!cancelled) {
+          setGeoDepartements([]);
+          setGeoErrorMessage("Impossible de charger les départements pour cette région.");
+        }
       } finally {
         if (!cancelled) setGeoDepartementsLoading(false);
       }
     }
+
     loadDepartements();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [watchedRegionId]);
 
   useEffect(() => {
-    if (!watchedDepartementId) { setGeoCommunes([]); return; }
+    if (!watchedDepartementId) {
+      setGeoCommunes([]);
+      setGeoCommunesLoading(false);
+      return;
+    }
+
     let cancelled = false;
+
     async function loadCommunes() {
       setGeoCommunesLoading(true);
+      setGeoErrorMessage(null);
       try {
         const list = await fetchPublicCommunes(watchedDepartementId);
-        if (!cancelled) setGeoCommunes(list);
+        if (cancelled) return;
+        setGeoCommunes(list);
       } catch {
-        if (!cancelled) { setGeoCommunes([]); setGeoErrorMessage("Impossible de charger les communes."); }
+        if (!cancelled) {
+          setGeoCommunes([]);
+          setGeoErrorMessage("Impossible de charger les communes pour ce département.");
+        }
       } finally {
         if (!cancelled) setGeoCommunesLoading(false);
       }
     }
+
     loadCommunes();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [watchedDepartementId]);
 
-  const regionSelectOptions = useMemo(() => geoRegions.map((r) => ({ value: r.id, label: r.name })), [geoRegions]);
-  const departementSelectOptions = useMemo(() => geoDepartements.map((d) => ({ value: d.id, label: d.name })), [geoDepartements]);
-  const communeSelectOptions = useMemo(() => geoCommunes.map((c) => ({ value: c.id, label: c.name })), [geoCommunes]);
+  const regionSelectOptions = useMemo(
+    () => geoRegions.map((r) => ({ value: r.id, label: r.name })),
+    [geoRegions]
+  );
+  const departementSelectOptions = useMemo(
+    () => geoDepartements.map((d) => ({ value: d.id, label: d.name })),
+    [geoDepartements]
+  );
+  const communeSelectOptions = useMemo(
+    () => geoCommunes.map((c) => ({ value: c.id, label: c.name })),
+    [geoCommunes]
+  );
 
   useEffect(() => {
-    if (!logoFile) { setLogoPreviewUrl(null); return; }
-    const url = URL.createObjectURL(logoFile);
-    setLogoPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [logoFile]);
-
-  useEffect(() => {
-    if (!recognitionFile) { setArretePdfCheck({ kind: "idle" }); return; }
-    const order = (watchedRecognitionOrder ?? "").trim();
-    if (order.length === 0) { setArretePdfCheck({ kind: "skipped" }); return; }
-    if (order.length < 2) { setArretePdfCheck({ kind: "short_ref" }); return; }
-    setArretePdfCheck({ kind: "pending" });
-    const ac = new AbortController();
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setArretePdfCheck({ kind: "loading" });
-        try {
-          const fd = new FormData();
-          fd.append("file", recognitionFile);
-          fd.append("recognitionOrder", order);
-          const res = await fetch("/api/public/validate-arrete-pdf", { method: "POST", body: fd, signal: ac.signal });
-          if (ac.signal.aborted) return;
-          const raw = await res.text();
-          let data: { valid?: boolean; error?: string } = {};
-          try { data = raw ? (JSON.parse(raw) as { valid?: boolean; error?: string }) : {}; } catch {
-            setArretePdfCheck({ kind: "error", message: res.status >= 500 ? "Réponse invalide du serveur." : `Réponse inattendue (code ${res.status}).` });
-            return;
-          }
-          if (!res.ok) { setArretePdfCheck({ kind: "error", message: data.error ?? "Impossible de vérifier le PDF" }); return; }
-          setArretePdfCheck(data.valid ? { kind: "valid" } : { kind: "invalid" });
-        } catch (e) {
-          if (ac.signal.aborted) return;
-          const aborted = (typeof DOMException !== "undefined" && e instanceof DOMException && e.name === "AbortError") || (e instanceof Error && e.name === "AbortError");
-          if (aborted) return;
-          setArretePdfCheck({ kind: "error", message: e instanceof Error ? e.message : "" });
-        }
-      })();
-    }, 650);
-    return () => { window.clearTimeout(timer); ac.abort(); };
-  }, [recognitionFile, watchedRecognitionOrder]);
-
-  const stepFields = STEPS[currentStep - 1]?.fields ?? [];
-
-  const orderTrimmed = (watchedRecognitionOrder ?? "").trim();
-  const pdfCheckBlocking =
-    currentStep === 2 &&
-    recognitionFile !== null &&
-    orderTrimmed.length >= 2 &&
-    (arretePdfCheck.kind === "invalid" ||
-      arretePdfCheck.kind === "error" ||
-      arretePdfCheck.kind === "loading" ||
-      arretePdfCheck.kind === "pending");
-
-  const goNext = async () => {
-    if (currentStep === 2 && !recognitionFile) {
-      setError("Le document de l'arrêté de reconnaissance est requis");
+    if (!logoFile) {
+      setLogoPreviewUrl(null);
       return;
     }
-    if (currentStep === 2 && orderTrimmed.length >= 2) {
-      if (arretePdfCheck.kind === "loading" || arretePdfCheck.kind === "pending") {
-        setError("Vérification du PDF en cours — patientez avant de continuer.");
-        return;
-      }
-      if (arretePdfCheck.kind === "invalid") {
-        setError("Le numéro d'arrêté ne correspond pas au document PDF joint. Corrigez la référence ou changez de document.");
-        return;
-      }
-      if (arretePdfCheck.kind === "error") {
-        setError("La vérification du PDF a échoué. Vérifiez le document et réessayez.");
-        return;
-      }
-    }
-    const valid = await form.trigger(stepFields as unknown as (keyof RegisterValues)[]);
-    setError("");
-    if (valid) setCurrentStep((s) => Math.min(s + 1, STEPS.length));
-  };
 
-  const goBack = () => {
-    setError("");
-    setCurrentStep((s) => Math.max(s - 1, 1));
-  };
+    const objectUrl = URL.createObjectURL(logoFile);
+    setLogoPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [logoFile]);
+
+  /* 1. Pré-analyse : le PDF est envoyé une seule fois, dès sa sélection, pendant que l'utilisateur
+        saisit le numéro. Les vérifications suivantes n'envoient plus que le numéro. */
+  useEffect(() => {
+    if (!recognitionFile) {
+      setPdfAnalysis({ state: "idle" });
+      return;
+    }
+
+    const ac = new AbortController();
+    setPdfAnalysis({ state: "analyzing" });
+    void (async () => {
+      try {
+        const fd = new FormData();
+        fd.append("file", recognitionFile);
+        const res = await fetch("/api/public/validate-arrete-pdf", {
+          method: "POST",
+          body: fd,
+          signal: ac.signal,
+        });
+        const data = await readArreteResponse(res);
+        if (ac.signal.aborted) return;
+        if (!res.ok || !data.fileId) {
+          setPdfAnalysis({ state: "error", message: data.error ?? "Impossible de lire ce PDF." });
+          return;
+        }
+        setPdfAnalysis({ state: "ready", fileId: data.fileId, hasText: !data.message });
+      } catch (e) {
+        if (ac.signal.aborted || isAbortError(e)) return;
+        setPdfAnalysis({
+          state: "error",
+          message: "Connexion interrompue ou serveur injoignable. Réessayez.",
+        });
+      }
+    })();
+
+    return () => ac.abort();
+  }, [recognitionFile, pdfAnalysisNonce]);
+
+  /* 2. Vérification du numéro sur le document déjà analysé (réponse quasi instantanée). */
+  useEffect(() => {
+    if (!recognitionFile) {
+      setArretePdfCheck({ kind: "idle" });
+      return;
+    }
+    if (pdfAnalysis.state === "analyzing" || pdfAnalysis.state === "idle") {
+      setArretePdfCheck({ kind: "analyzing" });
+      return;
+    }
+    if (pdfAnalysis.state === "error") {
+      setArretePdfCheck({ kind: "error", message: pdfAnalysis.message });
+      return;
+    }
+
+    const order = (watchedRecognitionOrder ?? "").trim();
+    if (order.length === 0) {
+      setArretePdfCheck({ kind: "skipped" });
+      return;
+    }
+    if (order.length < 2) {
+      setArretePdfCheck({ kind: "short_ref" });
+      return;
+    }
+
+    const { fileId, hasText } = pdfAnalysis;
+    const ac = new AbortController();
+    setArretePdfCheck({ kind: "loading" });
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/public/validate-arrete-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId, recognitionOrder: order }),
+            signal: ac.signal,
+          });
+          const data = await readArreteResponse(res);
+          if (ac.signal.aborted) return;
+
+          // Analyse expirée côté serveur : on renvoie le fichier une fois
+          if (res.status === 410) {
+            setPdfAnalysisNonce((n) => n + 1);
+            return;
+          }
+          if (!res.ok) {
+            setArretePdfCheck({ kind: "error", message: data.error ?? "Impossible de vérifier le PDF" });
+            return;
+          }
+          if (data.status === "found") {
+            setArretePdfCheck({ kind: "valid", excerpt: data.excerpt });
+          } else if (data.status === "near" && data.suggestion) {
+            setArretePdfCheck({ kind: "near", suggestion: data.suggestion, excerpt: data.excerpt });
+          } else {
+            setArretePdfCheck({ kind: "invalid", noText: !hasText });
+          }
+        } catch (e) {
+          if (ac.signal.aborted || isAbortError(e)) return;
+          setArretePdfCheck({
+            kind: "error",
+            message: "Connexion interrompue ou serveur injoignable. Réessayez.",
+          });
+        }
+      })();
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+      ac.abort();
+    };
+  }, [recognitionFile, pdfAnalysis, watchedRecognitionOrder]);
 
   const onSubmit = async (values: RegisterValues) => {
     setError("");
     setSuccess("");
 
-    if (!recognitionFile) { setError("Le document de l'arrêté de reconnaissance est requis"); return; }
-
-    const orderTrim = (values.recognitionOrder ?? "").trim();
-    if (orderTrim.length >= 2) {
-      if (["loading", "pending", "idle"].includes(arretePdfCheck.kind)) {
-        setError("Vérification du PDF en cours — patientez avant de soumettre.");
+    if (values.accountType === "association") {
+      if (!recognitionFile) {
+        setError("Le document de l'arrêté de reconnaissance est requis");
         return;
       }
-      if (["invalid", "error", "short_ref"].includes(arretePdfCheck.kind)) {
-        setError("Le numéro d'arrêté doit être retrouvé dans le PDF téléchargé.");
+      // Numéro obligatoire (validé par le schéma) : il doit avoir été retrouvé dans le PDF
+      if (
+        arretePdfCheck.kind === "loading" ||
+        arretePdfCheck.kind === "analyzing" ||
+        arretePdfCheck.kind === "idle"
+      ) {
+        setError("Vérification du PDF en cours — patientez un instant avant de soumettre.");
+        return;
+      }
+      if (arretePdfCheck.kind === "near") {
+        setError(
+          `Le numéro saisi ne correspond pas au document, qui indique « ${arretePdfCheck.suggestion} ». Corrigez votre saisie.`
+        );
+        return;
+      }
+      if (arretePdfCheck.kind !== "valid") {
+        setError(
+          "Le numéro de l'arrêté doit être retrouvé dans le PDF téléchargé. Corrigez le numéro ou le document."
+        );
         return;
       }
     }
@@ -348,26 +657,47 @@ export function RegisterForm({ initialRegions = EMPTY_REGIONS }: RegisterFormPro
     setIsSubmitting(true);
     try {
       const formData = new FormData();
-      Object.entries(values).forEach(([k, v]) => { if (v !== undefined && v !== null) formData.append(k, String(v)); });
-      formData.append("name", values.associationName);
-      formData.append("recognitionFile", recognitionFile);
-      if (logoFile) formData.append("logoFile", logoFile);
+      Object.entries(values).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+      if (values.accountType === "association") {
+        formData.append("name", values.associationName);
+        if (recognitionFile) formData.append("recognitionFile", recognitionFile);
+        if (logoFile) formData.append("logoFile", logoFile);
+      }
 
-      const response = await fetch("/api/public/register", { method: "POST", body: formData });
+      const response = await fetch("/api/public/register", {
+        method: "POST",
+        body: formData,
+      });
       const result = await response.json();
 
-      if (!response.ok) { setError(result.error || "Erreur lors de l'inscription"); return; }
+      if (!response.ok) {
+        setError(result.error || "Erreur lors de l'inscription");
+        return;
+      }
 
-      toast.success("Demande envoyée avec succès", {
-        description: "Votre dossier est en cours d'examen. Vous recevrez un email dès que votre compte sera activé.",
-        duration: 8000,
-      });
       setSuccess(result.message || "Inscription réussie.");
-      form.reset({ accountType: "association", associationName: "", email: "", password: "", confirmPassword: "", contactPhone: "", presidentName: "", recognitionOrder: "", location: "", activityDomain: "", prioritySectors: "", regionId: "", departementId: "", communeId: "" });
+      form.reset({
+        accountType: "association",
+        associationName: "",
+        email: "",
+        password: "",
+        contactPhone: "",
+        presidentName: "",
+        recognitionOrder: "",
+        location: "",
+        activityDomain: "",
+        prioritySectors: "",
+        regionId: "",
+        departementId: "",
+        communeId: "",
+      });
       setRecognitionFile(null);
       setLogoFile(null);
       setArretePdfCheck({ kind: "idle" });
-      setCurrentStep(1);
     } catch {
       setError("Erreur serveur");
     } finally {
@@ -375,529 +705,559 @@ export function RegisterForm({ initialRegions = EMPTY_REGIONS }: RegisterFormPro
     }
   };
 
-  const progress = (currentStep / STEPS.length) * 100;
+  const geoSelectCommon = {
+    unstyled: true,
+    classNames: geoSelectClassNames,
+    styles: geoSelectStyles,
+    menuPortalTarget: typeof document !== "undefined" ? document.body : null,
+    menuPosition: "fixed" as const,
+    isClearable: false,
+    isSearchable: true,
+  };
 
   return (
-    <div className="flex flex-col bg-slate-50">
-
-      {/* ── Header banner ── */}
-      <div
-        className="relative w-full overflow-hidden"
-        style={{ background: `linear-gradient(160deg, #024a36 0%, #035740 50%, #046347 80%, #053d2e 100%)` }}
-      >
-        {/* Fond décoratif */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/[0.04]" />
-          <div className="absolute -bottom-8 left-1/3 h-40 w-40 rounded-full bg-[#E26E12]/10" />
-          <div className="absolute top-0 right-1/4 h-full w-px bg-white/[0.06]" />
-        </div>
-
-        <div className="relative z-10 mx-auto max-w-5xl px-5 py-8 sm:px-8 sm:py-10">
-          {/* Titre + description */}
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/50">
-                Inscription
-              </p>
-              <h1 className="mt-1.5 text-2xl font-bold leading-tight text-white sm:text-3xl">
-                Créer un compte association
-              </h1>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">
-                {appConfig.websiteDescription}
-              </p>
-              <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-                {[
-                  "Annuaire officiel du Niger",
-                  "Dossier examiné avant activation",
-                  "Tableau de bord dédié",
-                ].map((item) => (
-                  <li key={item} className="flex items-center gap-1.5 text-xs text-white/75">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#E26E12]" aria-hidden />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Indicateur d'étapes horizontal */}
-            <div className="hidden shrink-0 sm:block">
-              <div className="flex items-center gap-1">
-                {STEPS.map((step, idx) => {
-                  const isDone = currentStep > step.id;
-                  const isActive = currentStep === step.id;
-                  return (
-                    <div key={step.id} className="flex items-center gap-1">
-                      <div
-                        className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all duration-200",
-                          isDone && "bg-[#E26E12] text-white",
-                          isActive && "bg-white text-[#035740] shadow-md",
-                          !isActive && !isDone && "bg-white/15 text-white/50"
-                        )}
-                        title={step.label}
-                      >
-                        {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.id}
-                      </div>
-                      {idx < STEPS.length - 1 && (
-                        <div className={cn("h-px w-6 transition-colors", isDone ? "bg-[#E26E12]/60" : "bg-white/15")} />
-                      )}
-                    </div>
-                  );
-                })}
+    <div
+      id="signup-scroll"
+      className="h-full overflow-y-auto overscroll-y-contain bg-[#F5F2EC] selection:bg-[var(--brand)] selection:text-white"
+      style={authBrandVars}
+    >
+      <div className="mx-auto w-full max-w-4xl px-3 pb-16 pt-4 sm:px-6 sm:pt-10">
+        <div className="overflow-hidden bg-white shadow-[0_28px_70px_-32px_rgba(3,40,28,0.45)] ring-1 ring-black/5">
+          {/* ─── Bandeau ─────────────────────────────────────────────────────── */}
+          <header className="relative isolate overflow-hidden">
+            <Image
+              src="/background.png"
+              alt=""
+              fill
+              priority
+              sizes="(min-width: 896px) 896px, 100vw"
+              className="-z-20 object-cover object-[center_60%]"
+            />
+            <div aria-hidden className="absolute inset-0 -z-10" style={{ background: authBannerGradient }} />
+            <div className="flex items-center gap-6 px-6 py-9 sm:px-10 sm:py-12">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-balance text-[1.875rem] font-bold leading-[1.1] tracking-tight text-white sm:text-[2.75rem]">
+                  Inscription d&apos;une association
+                </h1>
+                <p className="mt-3 max-w-[52ch] text-pretty text-sm leading-relaxed text-white/90 sm:text-base">
+                  Remplissez le formulaire ci-dessous pour inscrire votre association sur la plateforme.
+                  Chaque dossier est vérifié par notre équipe avant activation.
+                </p>
               </div>
-              <p className="mt-2 text-right text-xs text-white/40">
-                {STEPS[currentStep - 1]?.label}
-              </p>
+              <div className="hidden shrink-0 rounded-2xl bg-white p-2.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.45)] sm:block">
+                <Image
+                  src={appConfig.logoUrl}
+                  alt={appConfig.appName}
+                  width={104}
+                  height={104}
+                  className="h-[5.5rem] w-[5.5rem] object-contain"
+                  priority
+                />
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* Barre de progression */}
-        <div className="h-0.5 w-full bg-white/10">
-          <div
-            className="h-full bg-[#E26E12] transition-all duration-500 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* ── Formulaire ── */}
-      <div>
-        {/* Contenu scrollable */}
-        <div className="mx-auto flex w-full max-w-xl flex-col px-5 pt-8 pb-12 sm:px-7 lg:px-8 lg:pt-10 lg:pb-14">
-
-          {/* En-tête étape */}
-          <div className="mb-8">
-            <div className="mb-3 flex items-center gap-2">
-              {currentStep > 1 && (
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-                  aria-label="Étape précédente"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-              )}
-              <span className="text-xs font-semibold uppercase tracking-widest text-[#035740]">
-                Étape {currentStep} sur {STEPS.length}
-              </span>
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900">{STEPS[currentStep - 1]?.label}</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {currentStep === 1 && "Indiquez où est implantée votre association."}
-              {currentStep === 2 && "Joignez l'arrêté officiel de reconnaissance."}
-              {currentStep === 3 && "Ces identifiants serviront à accéder au tableau de bord."}
-              {currentStep === 4 && "Décrivez les domaines d'intervention de l'association."}
-              {currentStep === 5 && "Ajoutez le logo, puis soumettez votre dossier."}
-            </p>
-          </div>
+          </header>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-5 bg-[#FBFAF7] px-3 py-6 sm:space-y-6 sm:px-8 sm:py-8"
+              noValidate
+            >
+              <p className="px-1 text-sm text-muted-foreground">
+                Les champs marqués d&apos;un <span className="text-[var(--accent)]">*</span> sont obligatoires.
+              </p>
 
-              {/* ── Étape 1 : Localisation ── */}
-              {currentStep === 1 && (
-                <div className="space-y-5">
-                  {(geoErrorMessage || geoEmptyHint) && (
-                    <div role="alert" className={cn("rounded-lg border px-3.5 py-3 text-sm", geoErrorMessage ? "border-rose-200 bg-rose-50 text-rose-700" : "border-amber-200 bg-amber-50 text-amber-800")}>
-                      {geoErrorMessage ?? geoEmptyHint}
-                    </div>
-                  )}
-                  <FormField control={form.control} name="location" render={({ field }) => (
-                    <FormItem>
-                      <ReqLabel>Adresse / localisation</ReqLabel>
+              {/* ─── L'association ──────────────────────────────────────────── */}
+              <FormSection
+                title="L'association"
+                description="L'email et le mot de passe donnent accès au tableau de bord de l'association : ce n'est pas un compte personnel."
+              >
+                <FormField
+                  control={form.control}
+                  name="associationName"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <ReqLabel>Nom de l&apos;association</ReqLabel>
                       <FormControl>
-                        <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="Quartier, rue, point de repère…" autoComplete="street-address" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="regionId" render={({ field }) => (
-                      <FormItem>
-                        <ReqLabel>Région</ReqLabel>
-                        <FormControl>
-                          <Select<GeoSelectOption, false>
-                            instanceId="register-region" unstyled name={field.name} ref={field.ref}
-                            classNames={geoSelectClassNames} styles={geoSelectStyles}
-                            menuPortalTarget={typeof document !== "undefined" ? document.body : null} menuPosition="fixed"
-                            placeholder="Région" options={regionSelectOptions}
-                            value={regionSelectOptions.find((o) => o.value === field.value) ?? null}
-                            onChange={(opt: SingleValue<GeoSelectOption>) => { field.onChange(opt?.value ?? ""); form.setValue("departementId", ""); form.setValue("communeId", ""); }}
-                            onBlur={field.onBlur} isLoading={geoRegionsLoading}
-                            isDisabled={isSubmitting || geoRegionsLoading} isClearable={false} isSearchable
-                            noOptionsMessage={() => geoRegionsLoading ? "Chargement…" : "Aucune région"}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="departementId" render={({ field }) => (
-                      <FormItem>
-                        <ReqLabel>Département</ReqLabel>
-                        <FormControl>
-                          <Select<GeoSelectOption, false>
-                            instanceId="register-departement" unstyled name={field.name} ref={field.ref}
-                            classNames={geoSelectClassNames} styles={geoSelectStyles}
-                            menuPortalTarget={typeof document !== "undefined" ? document.body : null} menuPosition="fixed"
-                            placeholder="Département" options={departementSelectOptions}
-                            value={departementSelectOptions.find((o) => o.value === field.value) ?? null}
-                            onChange={(opt: SingleValue<GeoSelectOption>) => { field.onChange(opt?.value ?? ""); form.setValue("communeId", ""); }}
-                            onBlur={field.onBlur} isLoading={geoDepartementsLoading}
-                            isDisabled={isSubmitting || !watchedRegionId || geoDepartementsLoading} isClearable={false} isSearchable
-                            noOptionsMessage={() => geoDepartementsLoading ? "Chargement…" : watchedRegionId ? "Aucun département" : "Choisissez une région"}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                  <FormField control={form.control} name="communeId" render={({ field }) => (
-                    <FormItem>
-                      <ReqLabel>Commune</ReqLabel>
-                      <FormControl>
-                        <Select<GeoSelectOption, false>
-                          instanceId="register-commune" unstyled name={field.name} ref={field.ref}
-                          classNames={geoSelectClassNames} styles={geoSelectStyles}
-                          menuPortalTarget={typeof document !== "undefined" ? document.body : null} menuPosition="fixed"
-                          placeholder="Sélectionner une commune" options={communeSelectOptions}
-                          value={communeSelectOptions.find((o) => o.value === field.value) ?? null}
-                          onChange={(opt: SingleValue<GeoSelectOption>) => field.onChange(opt?.value ?? "")}
-                          onBlur={field.onBlur} isLoading={geoCommunesLoading}
-                          isDisabled={isSubmitting || !watchedDepartementId || geoCommunesLoading} isClearable={false} isSearchable
-                          noOptionsMessage={() => geoCommunesLoading ? "Chargement…" : watchedDepartementId ? "Aucune commune" : "Choisissez un département"}
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="Ex. : Association pour le développement local de Tillabéri"
+                          autoComplete="organization"
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
-                  )} />
-                </div>
-              )}
-
-              {/* ── Étape 2 : Reconnaissance légale ── */}
-              {currentStep === 2 && (
-                <div className="space-y-5">
-                  <FormField control={form.control} name="presidentName" render={({ field }) => (
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="presidentName"
+                  render={({ field }) => (
                     <FormItem>
                       <ReqLabel>Nom complet du président</ReqLabel>
                       <FormControl>
-                        <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="Prénom Nom" autoComplete="name" />
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="Prénom Nom"
+                          autoComplete="name"
+                        />
                       </FormControl>
+                      <p className={fieldHintClass}>Tel qu&apos;il figurera sur la fiche de l&apos;association.</p>
                       <FormMessage />
                     </FormItem>
-                  )} />
-                  <FormField control={form.control} name="recognitionOrder" render={({ field }) => (
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="contactPhone"
+                  render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium text-slate-700">Numéro de l'arrêté <span className="text-slate-400 font-normal">(optionnel)</span></FormLabel>
+                      <ReqLabel>Téléphone de contact</ReqLabel>
                       <FormControl>
-                        <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="Ex. : n° 2024-012 / MATD" />
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="+227 XX XX XX XX"
+                          type="tel"
+                          autoComplete="tel"
+                        />
                       </FormControl>
-                      <p className="text-xs text-slate-400 leading-relaxed">S'il est renseigné, il doit figurer dans le PDF joint.</p>
                       <FormMessage />
                     </FormItem>
-                  )} />
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Adresse email</ReqLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="contact@votre-association.ne"
+                          type="email"
+                          autoComplete="email"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Mot de passe</ReqLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="8 caractères minimum"
+                          type="password"
+                          autoComplete="new-password"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </FormSection>
 
-                  <div className="space-y-2">
-                    <StaticReqLabel htmlFor="register-recognition-pdf">Arrêté de reconnaissance (PDF)</StaticReqLabel>
-                    <label
-                      htmlFor="register-recognition-pdf"
+              {/* ─── Localisation ───────────────────────────────────────────── */}
+              <FormSection title="Localisation" description="Où se trouve le siège de l'association.">
+                {(geoErrorMessage || geoEmptyHint) && (
+                  <div
+                    role="alert"
+                    className={cn(
+                      "border px-3.5 py-3 text-sm leading-snug md:col-span-2",
+                      geoErrorMessage
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : "border-amber-500/35 bg-amber-500/10 text-amber-950"
+                    )}
+                  >
+                    {geoErrorMessage ?? geoEmptyHint}
+                  </div>
+                )}
+                <FormField
+                  control={form.control}
+                  name="regionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Région</ReqLabel>
+                      <FormControl>
+                        <Select<GeoSelectOption, false>
+                          {...geoSelectCommon}
+                          instanceId="register-region"
+                          name={field.name}
+                          ref={field.ref}
+                          placeholder="Choisir une région"
+                          options={regionSelectOptions}
+                          value={regionSelectOptions.find((o) => o.value === field.value) ?? null}
+                          onChange={(opt: SingleValue<GeoSelectOption>) => {
+                            field.onChange(opt?.value ?? "");
+                            form.setValue("departementId", "");
+                            form.setValue("communeId", "");
+                          }}
+                          onBlur={field.onBlur}
+                          isLoading={geoRegionsLoading}
+                          isDisabled={isSubmitting || geoRegionsLoading}
+                          noOptionsMessage={() =>
+                            geoRegionsLoading ? "Chargement…" : "Aucune région disponible"
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="departementId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Département</ReqLabel>
+                      <FormControl>
+                        <Select<GeoSelectOption, false>
+                          {...geoSelectCommon}
+                          instanceId="register-departement"
+                          name={field.name}
+                          ref={field.ref}
+                          placeholder={watchedRegionId ? "Choisir un département" : "Choisissez d’abord une région"}
+                          options={departementSelectOptions}
+                          value={departementSelectOptions.find((o) => o.value === field.value) ?? null}
+                          onChange={(opt: SingleValue<GeoSelectOption>) => {
+                            field.onChange(opt?.value ?? "");
+                            form.setValue("communeId", "");
+                          }}
+                          onBlur={field.onBlur}
+                          isLoading={geoDepartementsLoading}
+                          isDisabled={isSubmitting || !watchedRegionId || geoDepartementsLoading}
+                          noOptionsMessage={() =>
+                            geoDepartementsLoading
+                              ? "Chargement…"
+                              : watchedRegionId
+                                ? "Aucun département pour cette région"
+                                : "Choisissez d’abord une région"
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="communeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Commune</ReqLabel>
+                      <FormControl>
+                        <Select<GeoSelectOption, false>
+                          {...geoSelectCommon}
+                          instanceId="register-commune"
+                          name={field.name}
+                          ref={field.ref}
+                          placeholder={watchedDepartementId ? "Choisir une commune" : "Choisissez d’abord un département"}
+                          options={communeSelectOptions}
+                          value={communeSelectOptions.find((o) => o.value === field.value) ?? null}
+                          onChange={(opt: SingleValue<GeoSelectOption>) => field.onChange(opt?.value ?? "")}
+                          onBlur={field.onBlur}
+                          isLoading={geoCommunesLoading}
+                          isDisabled={isSubmitting || !watchedDepartementId || geoCommunesLoading}
+                          noOptionsMessage={() =>
+                            geoCommunesLoading
+                              ? "Chargement…"
+                              : watchedDepartementId
+                                ? "Aucune commune pour ce département"
+                                : "Choisissez d’abord un département"
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Adresse</ReqLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="Quartier, rue, point de repère…"
+                          autoComplete="street-address"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </FormSection>
+
+              {/* ─── Activité ───────────────────────────────────────────────── */}
+              <FormSection title="Activité">
+                <FormField
+                  control={form.control}
+                  name="activityDomain"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Domaine d&apos;activité</ReqLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="Ex. : santé communautaire, alphabétisation…"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="prioritySectors"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ReqLabel>Secteurs prioritaires</ReqLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="Ex. : eau, assainissement, petite enfance…"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </FormSection>
+
+              {/* ─── Documents officiels ────────────────────────────────────── */}
+              <FormSection
+                title="Documents officiels"
+                description="L'arrêté de reconnaissance est obligatoire pour l'examen du dossier ; le logo est facultatif."
+              >
+                <FormField
+                  control={form.control}
+                  name="recognitionOrder"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <ReqLabel>Numéro de l&apos;arrêté de reconnaissance</ReqLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                          className={inputFieldClass}
+                          placeholder="Ex. : 000813 ou 000813/MI/SP/D/DGAPJ"
+                        />
+                      </FormControl>
+                      <p className={fieldHintClass}>
+                        Tel qu&apos;il figure sur l&apos;arrêté : il est vérifié automatiquement dans le PDF
+                        ajouté ci-dessous.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="space-y-2 md:col-span-2">
+                  <StaticReqLabel htmlFor="register-recognition-pdf">
+                    Arrêté de reconnaissance (PDF)
+                  </StaticReqLabel>
+                  <FileDropField
+                    id="register-recognition-pdf"
+                    accept="application/pdf"
+                    file={recognitionFile}
+                    onFileChange={setRecognitionFile}
+                    disabled={isSubmitting}
+                    icon={FileText}
+                    emptyTitle="Choisir le fichier PDF de l'arrêté"
+                    emptyHint="PDF uniquement · 10 Mo maximum"
+                  />
+                  {recognitionFile && (
+                    <div
+                      role="status"
+                      aria-live="polite"
                       className={cn(
-                        "relative flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-white px-4 py-6 text-center transition-colors hover:border-[#035740]/40 hover:bg-slate-50",
-                        recognitionFile && "border-[#035740]/30 bg-[#035740]/5"
+                        "flex items-start gap-2.5 border px-3.5 py-3 text-sm leading-snug",
+                        arretePdfCheck.kind === "valid" && "border-emerald-500/40 bg-emerald-500/10 text-emerald-950",
+                        arretePdfCheck.kind === "invalid" && "border-destructive/40 bg-destructive/10 text-destructive",
+                        arretePdfCheck.kind === "near" && "border-amber-500/45 bg-amber-500/10 text-amber-950",
+                        (arretePdfCheck.kind === "loading" || arretePdfCheck.kind === "analyzing") &&
+                          "border-border bg-white text-foreground",
+                        (arretePdfCheck.kind === "skipped" ||
+                          arretePdfCheck.kind === "short_ref" ||
+                          arretePdfCheck.kind === "idle") &&
+                          "border-border bg-white text-muted-foreground",
+                        arretePdfCheck.kind === "error" && "border-destructive/35 bg-destructive/10 text-destructive"
                       )}
                     >
-                      <FileText className={cn("h-8 w-8", recognitionFile ? "text-[#035740]" : "text-slate-300")} />
-                      <div>
-                        <p className="text-sm font-medium text-slate-600">
-                          {recognitionFile ? recognitionFile.name : "Cliquez pour sélectionner un PDF"}
-                        </p>
-                        <p className="text-xs text-slate-400">PDF uniquement — 10 Mo maximum</p>
-                      </div>
-                      <input
-                        id="register-recognition-pdf"
-                        type="file"
-                        accept="application/pdf"
-                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        disabled={isSubmitting}
-                        onChange={(e) => setRecognitionFile(e.target.files?.[0] ?? null)}
-                      />
-                    </label>
+                      {arretePdfCheck.kind === "analyzing" && (
+                        <>
+                          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          <span>Lecture du document… Vous pouvez continuer à remplir le formulaire.</span>
+                        </>
+                      )}
+                      {arretePdfCheck.kind === "loading" && (
+                        <>
+                          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          <span>Recherche du numéro dans le document…</span>
+                        </>
+                      )}
+                      {arretePdfCheck.kind === "valid" && (
+                        <>
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                          <span className="min-w-0">
+                            <strong className="text-foreground">Numéro retrouvé dans le document.</strong>
+                            {arretePdfCheck.excerpt && (
+                              <span className="mt-1 block break-words text-xs text-emerald-900/80">
+                                Extrait : « {arretePdfCheck.excerpt} »
+                              </span>
+                            )}
+                          </span>
+                        </>
+                      )}
+                      {arretePdfCheck.kind === "near" && (
+                        <>
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+                          <span className="min-w-0">
+                            <strong className="text-foreground">Le numéro ne correspond pas exactement.</strong> Le
+                            document indique{" "}
+                            <strong className="text-foreground">« {arretePdfCheck.suggestion} »</strong> :
+                            vérifiez votre saisie.
+                            {arretePdfCheck.excerpt && (
+                              <span className="mt-1 block break-words text-xs text-amber-900/80">
+                                Extrait : « {arretePdfCheck.excerpt} »
+                              </span>
+                            )}
+                          </span>
+                        </>
+                      )}
+                      {arretePdfCheck.kind === "invalid" && (
+                        <>
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                          <span>
+                            {arretePdfCheck.noText ? (
+                              <>
+                                <strong className="text-foreground">Document illisible</strong> : aucun texte n&apos;a
+                                pu être lu dans ce PDF. Utilisez un scan plus net ou un autre export.
+                              </>
+                            ) : (
+                              <>
+                                <strong className="text-foreground">Numéro introuvable</strong> à côté de la mention
+                                « Arrêté n° » du document. Saisissez le numéro tel qu&apos;il apparaît sur
+                                l&apos;arrêté (ex. <code className="rounded bg-muted px-1">000813</code> ou{" "}
+                                <code className="rounded bg-muted px-1">000813/MI/SP/D/DGAPJ</code>).
+                              </>
+                            )}
+                          </span>
+                        </>
+                      )}
+                      {arretePdfCheck.kind === "skipped" && (
+                        <span>
+                          Document prêt. Renseignez le numéro de l&apos;arrêté ci-dessus pour le vérifier.
+                        </span>
+                      )}
+                      {arretePdfCheck.kind === "short_ref" && (
+                        <span>Saisissez au moins 2 caractères dans le numéro pour lancer la vérification.</span>
+                      )}
+                      {arretePdfCheck.kind === "idle" && <span>Préparation de la vérification…</span>}
+                      {arretePdfCheck.kind === "error" && (
+                        <>
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                          <span>
+                            Lecture du PDF impossible
+                            {arretePdfCheck.message ? ` : ${arretePdfCheck.message}` : ""}.
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                    {recognitionFile && (
-                      <div role="status" aria-live="polite" className={cn(
-                        "flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm",
-                        arretePdfCheck.kind === "valid" && "border-emerald-200 bg-emerald-50 text-emerald-800",
-                        arretePdfCheck.kind === "invalid" && "border-rose-200 bg-rose-50 text-rose-700",
-                        arretePdfCheck.kind === "loading" && "border-slate-200 bg-slate-50 text-slate-600",
-                        ["skipped", "short_ref", "idle", "pending"].includes(arretePdfCheck.kind) && "border-slate-100 bg-slate-50 text-slate-500",
-                        arretePdfCheck.kind === "error" && "border-rose-200 bg-rose-50 text-rose-700"
-                      )}>
-                        {arretePdfCheck.kind === "loading" && <><Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />Analyse en cours…</>}
-                        {arretePdfCheck.kind === "valid" && <><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Référence trouvée dans le PDF.</>}
-                        {arretePdfCheck.kind === "invalid" && <><XCircle className="mt-0.5 h-4 w-4 shrink-0" />Référence non trouvée dans le PDF.</>}
-                        {arretePdfCheck.kind === "skipped" && <span>Renseignez le numéro d'arrêté pour activer la vérification.</span>}
-                        {arretePdfCheck.kind === "short_ref" && <span>Saisissez au moins 2 caractères pour la vérification.</span>}
-                        {arretePdfCheck.kind === "pending" && <><Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-50" />Vérification…</>}
-                        {arretePdfCheck.kind === "idle" && <span>Préparation de la vérification…</span>}
-                        {arretePdfCheck.kind === "error" && <><XCircle className="mt-0.5 h-4 w-4 shrink-0" />Erreur{arretePdfCheck.message ? ` : ${arretePdfCheck.message}` : ""}.</>}
+                <div className="space-y-2 md:col-span-2">
+                  <label
+                    htmlFor="register-association-logo"
+                    className="block text-sm font-medium leading-snug text-foreground"
+                  >
+                    Logo de l&apos;association
+                    <span className="ml-1.5 font-normal text-muted-foreground">(facultatif)</span>
+                  </label>
+                  <div className="flex items-stretch gap-3">
+                    {logoPreviewUrl && (
+                      <div className="flex w-[4.75rem] shrink-0 items-center justify-center border border-border bg-white p-1.5">
+                        <Image
+                          src={logoPreviewUrl}
+                          alt="Aperçu du logo"
+                          width={72}
+                          height={72}
+                          className="h-16 w-16 object-contain"
+                          unoptimized
+                        />
                       </div>
                     )}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Étape 3 : Identification ── */}
-              {currentStep === 3 && (
-                <div className="space-y-5">
-                  <FormField control={form.control} name="associationName" render={({ field }) => (
-                    <FormItem>
-                      <ReqLabel>Nom de l'association</ReqLabel>
-                      <FormControl>
-                        <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="Ex. : Association pour le développement local de Tillabéri" autoComplete="organization" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <FormField control={form.control} name="email" render={({ field }) => (
-                      <FormItem>
-                        <ReqLabel>Email du compte</ReqLabel>
-                        <FormControl>
-                          <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="contact@asso.ne" type="email" autoComplete="email" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="contactPhone" render={({ field }) => (
-                      <FormItem>
-                        <ReqLabel>Téléphone de contact</ReqLabel>
-                        <FormControl>
-                          <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="+227 XX XX XX XX" type="tel" autoComplete="tel" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <FormField control={form.control} name="password" render={({ field }) => (
-                      <FormItem>
-                        <ReqLabel>Mot de passe</ReqLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Input
-                              {...field}
-                              disabled={isSubmitting}
-                              className={cn(inputFieldClass, "pr-10")}
-                              placeholder="8 caractères min."
-                              type={showPassword ? "text" : "password"}
-                              autoComplete="new-password"
-                            />
-                            <button
-                              type="button"
-                              tabIndex={-1}
-                              onClick={() => setShowPassword((v) => !v)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-slate-400 transition-colors hover:text-slate-600"
-                              aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                            >
-                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="confirmPassword" render={({ field }) => (
-                      <FormItem>
-                        <ReqLabel>Confirmer le mot de passe</ReqLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Input
-                              {...field}
-                              disabled={isSubmitting}
-                              className={cn(inputFieldClass, "pr-10")}
-                              placeholder="Répétez le mot de passe"
-                              type={showConfirm ? "text" : "password"}
-                              autoComplete="new-password"
-                            />
-                            <button
-                              type="button"
-                              tabIndex={-1}
-                              onClick={() => setShowConfirm((v) => !v)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-slate-400 transition-colors hover:text-slate-600"
-                              aria-label={showConfirm ? "Masquer la confirmation" : "Afficher la confirmation"}
-                            >
-                              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3.5 py-3 text-xs text-slate-500 leading-relaxed">
-                    L'email et le mot de passe servent à l'accès du <strong className="text-slate-700">compte association</strong> sur la plateforme — ce ne sont pas des informations personnelles.
-                  </div>
-                </div>
-              )}
-
-              {/* ── Étape 4 : Activité ── */}
-              {currentStep === 4 && (
-                <div className="space-y-5">
-                  <FormField control={form.control} name="activityDomain" render={({ field }) => (
-                    <FormItem>
-                      <ReqLabel>Domaine d'activité principal</ReqLabel>
-                      <FormControl>
-                        <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="Ex. : santé communautaire, alphabétisation…" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="prioritySectors" render={({ field }) => (
-                    <FormItem>
-                      <ReqLabel>Secteurs d'activité prioritaires</ReqLabel>
-                      <FormControl>
-                        <Input {...field} disabled={isSubmitting} className={inputFieldClass} placeholder="Ex. : eau, assainissement, petite enfance…" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-              )}
-
-              {/* ── Étape 5 : Logo + soumission ── */}
-              {currentStep === 5 && (
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label htmlFor="register-association-logo" className="text-sm font-medium text-slate-700">Logo de l'association <span className="font-normal text-slate-400">(optionnel)</span></label>
-                    <label
-                      htmlFor="register-association-logo"
-                      className={cn(
-                        "relative flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 bg-white px-4 py-6 text-center transition-colors hover:border-[#035740]/40 hover:bg-slate-50",
-                        logoFile && "border-[#035740]/30 bg-[#035740]/5"
-                      )}
-                    >
-                      {logoPreviewUrl ? (
-                        <Image src={logoPreviewUrl} alt="Prévisualisation logo" width={120} height={120} className="h-24 w-auto rounded-lg object-contain" />
-                      ) : (
-                        <ImageIcon className="h-8 w-8 text-slate-300" />
-                      )}
-                      <div>
-                        <p className="text-sm font-medium text-slate-600">
-                          {logoFile ? logoFile.name : "Cliquez pour choisir une image"}
-                        </p>
-                        <p className="text-xs text-slate-400">JPG, PNG, WebP — 10 Mo maximum</p>
-                      </div>
-                      <input
+                    <div className="min-w-0 flex-1">
+                      <FileDropField
                         id="register-association-logo"
-                        type="file"
                         accept="image/png,image/jpeg,image/webp,image/gif"
-                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        file={logoFile}
+                        onFileChange={setLogoFile}
                         disabled={isSubmitting}
-                        onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                        icon={ImagePlus}
+                        emptyTitle="Choisir l'image du logo"
+                        emptyHint="JPG, PNG, WebP ou GIF · 10 Mo maximum"
                       />
-                    </label>
-                  </div>
-
-                  {/* Récapitulatif */}
-                  <div className="rounded-xl border border-slate-100 bg-white p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Récapitulatif</p>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Association</span>
-                        <span className="font-medium text-slate-800 text-right">{form.watch("associationName") || "—"}</span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Email</span>
-                        <span className="font-medium text-slate-800 text-right">{form.watch("email") || "—"}</span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Téléphone</span>
-                        <span className="font-medium text-slate-800 text-right">{form.watch("contactPhone") || "—"}</span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Président</span>
-                        <span className="font-medium text-slate-800 text-right">{form.watch("presidentName") || "—"}</span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Arrêté PDF</span>
-                        <span className={cn("font-medium text-right", recognitionFile ? "text-emerald-600" : "text-rose-500")}>
-                          {recognitionFile ? recognitionFile.name : "Non joint"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span className="text-slate-500">Logo</span>
-                        <span className={cn("font-medium text-right", logoFile ? "text-emerald-600" : "text-slate-400")}>
-                          {logoFile ? logoFile.name : "Non joint"}
-                        </span>
-                      </div>
                     </div>
                   </div>
-
-                  <FormError message={error} />
-                  <FormSuccess message={success} />
                 </div>
-              )}
+              </FormSection>
 
-              {/* ── Navigation ── */}
-              <div className="mt-2 flex items-center gap-3">
-                {currentStep > 1 && (
-                  <button
-                    type="button"
-                    onClick={goBack}
-                    disabled={isSubmitting}
-                    className="flex h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Retour
-                  </button>
-                )}
-
-                {currentStep < STEPS.length ? (
-                  <button
-                    type="button"
-                    onClick={goNext}
-                    disabled={isSubmitting || pdfCheckBlocking}
-                    className="flex h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                    style={{ backgroundColor: appConfig.primaryColor }}
-                  >
-                    {(arretePdfCheck.kind === "loading" || arretePdfCheck.kind === "pending") && currentStep === 2 ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" />Vérification…</>
-                    ) : (
-                      <>Continuer<ChevronRight className="h-4 w-4" /></>
-                    )}
-                  </button>
-                ) : (
+              {/* ─── Envoi ──────────────────────────────────────────────────── */}
+              <div className="space-y-4 px-1 pt-1">
+                <FormError message={error} />
+                <FormSuccess message={success} />
+                <div className="flex flex-col-reverse items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-center text-sm text-muted-foreground sm:text-left">
+                    Déjà inscrit ?{" "}
+                    <Link href="/auth/login" className={authLinkClass}>
+                      Se connecter
+                    </Link>
+                  </p>
                   <Button
-                    type="submit"
                     disabled={isSubmitting}
-                    className="h-11 flex-1 gap-2 rounded-lg text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: appConfig.primaryColor }}
+                    type="submit"
+                    className={authPrimaryButtonClass}
                   >
                     {isSubmitting ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                         Envoi en cours…
-                      </span>
+                      </>
                     ) : (
-                      "Soumettre la demande"
+                      <>
+                        Envoyer la demande
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                      </>
                     )}
                   </Button>
-                )}
+                </div>
               </div>
-
-              {/* Erreur des étapes intermédiaires */}
-              {currentStep < STEPS.length && error && (
-                <FormError message={error} />
-              )}
-
-              {/* Lien connexion mobile */}
-              <p className="mt-2 text-center text-sm text-slate-400 lg:hidden">
-                Déjà un compte ?{" "}
-                <Link href="/auth/login" className="font-medium text-[#035740] hover:underline">
-                  Se connecter
-                </Link>
-              </p>
             </form>
           </Form>
         </div>

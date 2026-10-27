@@ -86,11 +86,12 @@ export default async function DashboardAssociationsPage({
     ...( { isDeleted: false } as Prisma.AssociationWhereInput),
   };
 
-  if (
-    currentUser.role !== UserRole.ADMIN &&
-    currentUser.role !== UserRole.SUPER_ADMIN &&
-    currentUser.role !== UserRole.MODERATOR
-  ) {
+  const isModerationStaff =
+    currentUser.role === UserRole.ADMIN ||
+    currentUser.role === UserRole.SUPER_ADMIN ||
+    currentUser.role === UserRole.MODERATOR;
+
+  if (!isModerationStaff) {
     where.userId = currentUser.id;
   }
 
@@ -330,6 +331,7 @@ export default async function DashboardAssociationsPage({
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Link>
+                    {isModerationStaff ? (
                     <form action={toggleAssociationStatusAction}>
                       <input type="hidden" name="associationId" value={association.id} />
                       <button
@@ -357,6 +359,7 @@ export default async function DashboardAssociationsPage({
                         )}
                       </button>
                     </form>
+                    ) : null}
                     <AssociationDeleteDialog
                       associationId={association.id}
                       associationName={association.name}

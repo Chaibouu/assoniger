@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { DocumentType } from "@prisma/client";
+import { DocumentType, UserRole } from "@prisma/client";
 import { assertAssociationManagementAccess } from "@/lib/association-self-access";
-import { ASSOCIATION_MEMBER_SIMPLE_POSITION } from "@/lib/association-member-kind";
+import {
+  ASSOCIATION_MEMBER_SIMPLE_POSITION,
+  isReservedMemberPosition,
+} from "@/lib/association-member-kind";
 import { ASSOCIATION_DOCUMENT_TYPES } from "@/lib/association-document-types";
 import { db } from "@/lib/db";
 import { associationDocumentsUploadRelative } from "@/lib/association-upload-paths";
@@ -52,7 +55,10 @@ export async function addAssociationMemberAction(formData: FormData) {
   if (fullName.length < 2) {
     redirect(await membresPath(associationId, { err: "champs" }));
   }
-  if (memberKind === "executive" && position.length < 2) {
+  if (
+    memberKind === "executive" &&
+    (position.length < 2 || isReservedMemberPosition(position))
+  ) {
     redirect(await membresPath(associationId, { err: "poste" }));
   }
 
@@ -152,7 +158,10 @@ export async function updateAssociationMemberAction(formData: FormData) {
   if (fullName.length < 2) {
     redirect(await membresPath(associationId, { err: "champs" }));
   }
-  if (memberKind === "executive" && position.length < 2) {
+  if (
+    memberKind === "executive" &&
+    (position.length < 2 || isReservedMemberPosition(position))
+  ) {
     redirect(await membresPath(associationId, { err: "poste" }));
   }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -207,8 +216,9 @@ export async function approveJoinRequestAction(formData: FormData) {
       data: { position: ASSOCIATION_MEMBER_SIMPLE_POSITION },
     });
     if (member.email) {
+      // Uniquement le compte membre créé par la demande d'adhésion (jamais un autre rôle)
       await tx.user.updateMany({
-        where: { email: member.email },
+        where: { email: member.email, role: UserRole.MEMBER, isDeleted: false },
         data: { isActive: true },
       });
     }

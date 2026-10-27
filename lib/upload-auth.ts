@@ -1,7 +1,9 @@
 import type { NextRequest } from "next/server";
 import type { NextResponse } from "next/server";
-import { getFullTokenPayload } from "@/lib/tokens";
-import { refreshUserToken } from "@/lib/user";
+import { UserRole } from "@prisma/client";
+import { db } from "@/lib/db";
+import { verifyAccessToken } from "@/lib/tokens";
+import { refreshSession } from "@/lib/session";
 
 /** Extensions visibles sur le site public sans session (logos). SVG exclu (risque XSS). */
 const PUBLIC_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
@@ -30,7 +32,7 @@ export type UploadSession =
 export async function resolveUploadSession(req: NextRequest): Promise<UploadSession> {
   const impersonation = req.cookies.get("impersonationToken")?.value;
   if (impersonation) {
-    const p = getFullTokenPayload(impersonation);
+    const p = await verifyAccessToken(impersonation);
     if (p?.userId) {
       return { ok: true, userId: p.userId };
     }
@@ -40,7 +42,7 @@ export async function resolveUploadSession(req: NextRequest): Promise<UploadSess
   let access = bearer || req.cookies.get("accessToken")?.value || null;
 
   if (access) {
-    const p = getFullTokenPayload(access);
+    const p = await verifyAccessToken(access);
     if (p?.userId) {
       return { ok: true, userId: p.userId };
     }
@@ -51,17 +53,17 @@ export async function resolveUploadSession(req: NextRequest): Promise<UploadSess
     return { ok: false };
   }
 
-  const refreshed = await refreshUserToken(refresh, req.nextUrl.origin);
-  if ("error" in refreshed || !refreshed.accessToken) {
+  const refreshed = await refreshSession(refresh);
+  if ("error" in refreshed) {
     return { ok: false };
   }
 
-  const p = getFullTokenPayload(refreshed.accessToken);
+  const p = await verifyAccessToken(refreshed.accessToken);
   if (!p?.userId) {
     return { ok: false };
   }
 
-  const maxAge = refreshed.accessTokenExpiresAt ?? 3600;
+  const maxAge = refreshed.accessTokenExpiresAt;
 
   return {
     ok: true,
@@ -78,6 +80,62 @@ export async function resolveUploadSession(req: NextRequest): Promise<UploadSess
       });
     },
   };
+}
+
+/**
+ * Extrait l'id d'association d'un segment de dossier `associations/{id}` ou legacy `associations/{slug}-{id}`.
+ * Les cuid ne contiennent pas de tiret : l'id est toujours la dernière partie.
+ */
+function associationIdFromFolder(folder: string): string | null {
+  const id = folder.split("-").pop() ?? "";
+  return id ? id : null;
+}
+
+/**
+ * Vérifie qu'un utilisateur authentifié a le droit de lire un fichier sous `/uploads/...`.
+ * - Modération (ADMIN, SUPER_ADMIN, MODERATOR) : tous les fichiers.
+ * - `associations/{id}/...` : compte titulaire de l'association.
+ * - `users/{userId}/...` : l'utilisateur qui a envoyé le fichier.
+ * - Tout autre chemin : modération uniquement.
+ *
+ * @param segments Segments décodés après `/uploads/`.
+ */
+export async function canUserAccessUpload(
+  userId: string,
+  segments: string[]
+): Promise<boolean> {
+  const user = await db.user.findFirst({
+    where: { id: userId, isDeleted: false, isActive: true },
+    select: { id: true, role: true },
+  });
+  if (!user) return false;
+
+  if (
+    user.role === UserRole.ADMIN ||
+    user.role === UserRole.SUPER_ADMIN ||
+    user.role === UserRole.MODERATOR
+  ) {
+    return true;
+  }
+
+  const [scope, owner] = segments;
+  if (!owner || segments.length < 3) return false;
+
+  if (scope === "users") {
+    return owner === user.id;
+  }
+
+  if (scope === "associations") {
+    const associationId = associationIdFromFolder(owner);
+    if (!associationId) return false;
+    const association = await db.association.findFirst({
+      where: { id: associationId, isDeleted: false, userId: user.id },
+      select: { id: true },
+    });
+    return Boolean(association);
+  }
+
+  return false;
 }
 
 /**
